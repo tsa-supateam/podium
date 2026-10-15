@@ -43,7 +43,7 @@ def sha256(path: Path) -> str:
 def download(url: str, dest: Path) -> None:
     if dest.exists():
         return
-    print(f"  ↓ {url}")
+    print(f"  downloading {url}")
     tmp = dest.with_suffix(dest.suffix + ".part")
     with urllib.request.urlopen(url) as r, tmp.open("wb") as f:
         shutil.copyfileobj(r, f)
@@ -131,16 +131,16 @@ def verify_lock() -> None:
         if p.is_file() and p.name != LOCK.name and not p.name.startswith(".")
         and "nltk_data" not in p.parts and ".cache" not in p.parts
     )
-    current = {str(p.relative_to(MODELS)): sha256(p) for p in files}
+    current = {p.relative_to(MODELS).as_posix(): sha256(p) for p in files}
     if LOCK.exists():
         locked = json.loads(LOCK.read_text())
         bad = [k for k, v in locked.items() if current.get(k) != v]
         if bad:
             sys.exit(f"Checksum mismatch for: {bad}. Delete them and re-run.")
-        print(f"✓ {len(locked)} model files match manifest.lock.json")
+        print(f"OK: {len(locked)} model files match manifest.lock.json")
     else:
         LOCK.write_text(json.dumps(current, indent=2) + "\n")
-        print(f"✓ wrote manifest.lock.json ({len(current)} files)")
+        print(f"OK: wrote manifest.lock.json ({len(current)} files)")
 
 
 def main() -> None:
