@@ -1,0 +1,134 @@
+"""Gaze summary and composite scoring (spec §6.2.4, §6.5)."""
+
+from __future__ import annotations
+
+import base64
+import re
+
+import numpy as np
+
+from ..realtime.fusion import AUDIENCE_ZONES, audience_entropy, clip01
+from .segmentation import tri
+
+YAW_BINS = (-40.0, 40.0, 2.0)
+PITCH_BINS = (-30.0, 20.0, 2.0)
+
+
+def gaze_summary(gaze: list[dict], duration: float) -> dict | None:
+    if len(gaze) < 30:
+        return None
+    gaze = sorted(gaze, key=lambda g: g["t"])
+    ts = np.array([g["t"] for g in gaze])
+    dt = np.clip(np.diff(ts, append=ts[-1] + 1 / 30), 0, 0.1)
+    zones = [g.get("zone", "X") if g.get("face", True) else "X" for g in gaze]
+    tot = {z: 0.0 for z in ("L", "C", "R", "N", "X")}
+    for d, z in zip(dt, zones):
+        tot[z] += float(d)
+    all_t = sum(tot.values()) or 1.0
+    visible = all_t - tot["X"]
+    zone_pct = {z: round(100 * v / all_t, 1) for z, v in tot.items()}
+    shares = {z: v / all_t for z, v in tot.items()}
+    aud = sum(tot[z] for z in AUDIENCE_ZONES)
+
+    # longest uninterrupted notes stare
+    longest, run_start = 0.0, None
+    stares: list[dict] = []
+    for t, z in zip(ts, zones + ["X"]):
+        if z == "N" and run_start is None:
+            run_start = t
+        elif z != "N" and run_start is not None:
+            dur = t - run_start
+            longest = max(longest, dur)
+            if dur > 5:
+                stares.append({"t0": round(float(run_start), 2), "t1": round(float(t), 2)})
+            run_start = None
+
+    # heatmap (yaw, pitch) histogram, Gaussian-smoothed
+    pts = np.array([(g.get("gYaw", g.get("yaw", 0)), g.get("gPitch", g.get("pitch", 0)))
+                    for g in gaze if g.get("face", True) and ("gYaw" in g or "yaw" in g)], dtype=float).reshape(-1, 2)
+    yb = np.arange(YAW_BINS[0], YAW_BINS[1] + YAW_BINS[2], YAW_BINS[2])
+    pb = np.arange(PITCH_BINS[0], PITCH_BINS[1] + PITCH_BINS[2], PITCH_BINS[2])
+    hist = np.zeros((len(pb) - 1, len(yb) - 1))
+    if len(pts):
+        hist, _, _ = np.histogram2d(pts[:, 1], pts[:, 0], bins=[pb, yb])
+        from scipy.ndimage import gaussian_filter
+
+        hist = gaussian_filter(hist, 1.5)
+        hist = hist / (hist.max() or 1.0)
+    enc = base64.b64encode((hist * 255).astype(np.uint8).tobytes()).decode()
+
+    timeline = []
+    last = None
+    for t, z in zip(ts, zones):
+        if z != last:
+            timeline.append([round(float(t), 2), z])
+            last = z
+    return {
+        "faceVisibleFrac": round(visible / all_t, 3),
+        "zonePct": zone_pct,
+        "audiencePct": round(100 * aud / (visible or 1.0), 1),
+        "balanceEntropy": round(audience_entropy(shares), 3),
+        "longestNotesStareSec": round(longest, 1),
+        "notesStares": stares,
+        "heatmap": {"yawBins": list(YAW_BINS), "pitchBins": list(PITCH_BINS),
+                    "rows": int(hist.shape[0]), "cols": int(hist.shape[1]), "u8": enc},
+        "timeline": timeline,
+    }
+
+
+def score_eye(g: dict | None) -> int | None:
+    if not g:
+        return None
+    aud_frac = g["audiencePct"] / 100
+    s = 100 * clip01(aud_frac / 0.75) ** 0.7 * (0.7 + 0.3 * g["balanceEntropy"])
+    s -= min(20, 2 * len(g.get("notesStares", [])))
+    return int(round(max(0.0, s)))
+
+
+def score_pace(p: dict, band: list[float]) -> int:
+    mu = p.get("meanWpm", 0)
+    if mu <= 0:
+        return 0
+    lo, hi = band
+    in_band = 1.0 if lo <= mu <= hi else clip01(1 - (lo - mu if mu < lo else mu - hi) / 40)
+    cv = tri(p.get("cv", 0), 0.02, 0.15, 0.35)
+    jitter = clip01(1 - (p.get("npvi", 0) - 8) / 12)
+    return int(round(100 * (0.5 * in_band + 0.3 * cv + 0.2 * jitter)))
+
+
+def score_fillers(per_min: float) -> int:
+    return int(round(100 * clip01(1 - (per_min - 1) / 9)))
+
+
+def score_voice(v: dict) -> int:
+    return int(round(100 * (0.6 * tri(v.get("f0StdSt", 0), 0.5, 3.5, 8.0) + 0.4 * tri(v.get("rmsDbStd", 0), 1.0, 5.0, 11.0))))
+
+
+HOOK = re.compile(r"(\?|\d|imagine|what if|did you know|have you ever|picture this)", re.IGNORECASE)
+TRANSITIONS = ["first", "firstly", "second", "secondly", "third", "next", "then", "finally", "lastly", "another",
+               "in conclusion", "to conclude", "to summarize", "in summary", "moving on", "on the other hand",
+               "for example", "for instance", "however"]
+CONCLUSION = re.compile(r"\b(in conclusion|to conclude|to summarize|in summary|to sum up|thank you|finally)\b", re.IGNORECASE)
+
+
+def structure(sents: list, duration: float, target_s: float | None) -> dict:
+    text = " ".join(s.text for s in sents).lower()
+    opening = [s for s in sents if s.t0 <= max(0.15 * duration, 10)]
+    closing = [s for s in sents if s.t1 >= 0.85 * duration]
+    found = [t for t in TRANSITIONS if re.search(r"\b" + re.escape(t) + r"\b", text)]
+    hook = any(HOOK.search(s.text) for s in opening)
+    concl = any(CONCLUSION.search(s.text) for s in closing)
+    in_time = target_s is None or abs(duration - target_s) <= 0.1 * target_s
+    score = 25 * hook + 25 * (len(found) >= 2) + 25 * concl + 25 * in_time
+    return {"sentences": len(sents), "openingHook": hook, "conclusionDetected": concl,
+            "transitions": found, "withinTarget": in_time, "score": int(score)}
+
+
+def overall(scores: dict[str, int | None]) -> tuple[int, str]:
+    w = {"pacing": 0.20, "fillers": 0.20, "vocalVariety": 0.20, "eyeContact": 0.25, "structure": 0.15}
+    num = sum(w[k] * v for k, v in scores.items() if k in w and v is not None)
+    den = sum(w[k] for k, v in scores.items() if k in w and v is not None)
+    s = int(round(num / den)) if den else 0
+    grade = next(g for cut, g in [(93, "A"), (90, "A-"), (87, "B+"), (83, "B"), (80, "B-"), (77, "C+"), (73, "C"),
+                                  (70, "C-"), (60, "D"), (0, "F")] if s >= cut)
+    return s, grade

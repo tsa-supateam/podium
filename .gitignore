@@ -1,0 +1,21 @@
+# dependencies / builds
+node_modules/
+apps/desktop/dist/
+apps/desktop/dist-electron/
+apps/desktop/public/mediapipe/
+engine/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+
+# models are downloaded by scripts/fetch_models.py (only the checksum lock is committed)
+models/*
+!models/manifest.lock.json
+!models/README.md
+
+# OS / editor
+.DS_Store
+.claude/
+*.log

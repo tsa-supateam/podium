@@ -1,0 +1,66 @@
+# Every tunable constant in Podium lives here, with the reason it was chosen.
+# See docs/TECHNICAL_SPEC.md Appendix A.
+
+[audio]
+sample_rate = 16000
+block_ms = 20                 # PortAudio callback size
+
+[vad]
+speech_on = 0.5               # Silero probability to start speech
+speech_off = 0.35             # hysteresis: lower threshold to end speech
+min_speech_ms = 90
+min_silence_ms = 250          # gaps shorter than this are not pauses
+
+[pace]
+window_s = 5.0                # rolling WPM window (spec requirement)
+ema_alpha = 0.4               # display smoothing
+band = [130, 170]             # optimal presentation pace
+drag = 110
+rush = 190
+
+[prosody]
+fmin = 65.0
+fmax = 400.0
+frame = 1024                  # 64 ms analysis frame
+hop = 320                     # 20 ms hop
+baseline_s = 20.0             # seconds of voiced speech used for the speaker's f0 baseline
+
+[fillers]
+lexical = ["like", "you know", "so", "basically", "actually", "literally", "right", "i mean", "kind of", "sort of"]
+filled_pauses = ["um", "uh", "er", "ah", "hmm", "umm", "uhh", "erm", "mm", "hm"]
+# Vosk's small model has no "um"/"uh" in its vocabulary; it maps them to these sound-alikes.
+vosk_soundalikes = ["on", "all", "owe", "oh", "i'm", "um", "uh", "a", "ah", "huh", "hm", "uh-huh", "are", "an", "and", "of"]
+soundalike_min_dur = 0.30     # seconds; real function words are usually shorter
+fpd_min_dur = 0.35            # acoustic filled-pause: minimum stable-vowel length
+fpd_max_dur = 1.40
+fpd_max_st_std = 0.7          # pitch must be flat (semitones)
+merge_window = 0.30           # two detections closer than this are one filler
+
+[boredom]
+weights = { filler = 0.25, monotony = 0.30, gaze = 0.35, pace = 0.10 }
+filler_window_s = 30.0
+rho0 = 0.05                   # 5% filler ratio = halfway point
+s_f = 0.015
+prosody_window_s = 10.0
+sigma_lo = 1.5                # semitones: below this sounds flat
+sigma_hi = 4.0                # semitones: above this sounds lively
+energy_lo = 2.0               # dB
+energy_hi = 6.0
+gaze_window_s = 10.0
+gaze_lambda = 0.6             # credit for looking at the audience at all vs spreading attention
+k_up = 0.1667                 # 1/6 s: ~6 s to lose the audience
+k_down = 0.10                 # 1/10 s: ~10 s to win it back
+tick_s = 0.25
+silence_grace_s = 3.0
+avatar_beta = 0.45            # how strongly a seating section reacts to being looked at
+
+[deep]
+whisper_model = "faster-whisper-base.en"
+compute_type = "int8"
+chunk_max_s = 25.0            # keep each chunk under Whisper's 30 s window so the prompt applies everywhere
+initial_prompt = "Umm, so, uh, I was like, you know, thinking... Hmm, okay. Uh, right."
+dbscan_eps = 4.0
+dbscan_min = 3
+monotone_win_s = 8.0
+monotone_st = 1.5
+monotone_db = 2.5
