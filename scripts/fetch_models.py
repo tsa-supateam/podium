@@ -114,14 +114,14 @@ def build_idf() -> None:
         import zipfile as zf
 
         zf.ZipFile(MODELS / "nltk_data" / "corpora" / "inaugural.zip").extractall(corpus_dir.parent)
-    docs = [p.read_text(errors="ignore").lower() for p in sorted(corpus_dir.glob("*.txt"))]
+    docs = [p.read_text(encoding="utf-8", errors="ignore").lower() for p in sorted(corpus_dir.glob("*.txt"))]
     df: dict[str, int] = {}
     for d in docs:
         for term in set(re.findall(r"[a-z][a-z'-]+", d)):
             df[term] = df.get(term, 0) + 1
     n = len(docs)
     idf = {t: round(math.log((1 + n) / (1 + c)) + 1, 4) for t, c in df.items()}
-    out.write_text(json.dumps({"n_docs": n, "default": round(math.log(1 + n) + 1, 4), "idf": idf}, sort_keys=True))
+    out.write_text(json.dumps({"n_docs": n, "default": round(math.log(1 + n) + 1, 4), "idf": idf}, sort_keys=True), encoding="utf-8")
     print(f"IDF table: {len(idf)} terms from {n} speeches")
 
 
