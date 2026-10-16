@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { cameraStream } from "../../lib/camera";
-import { ZONE_NAMES, type Zone } from "../../lib/types";
+import { zoneNames, type Zone } from "../../lib/types";
 import { live, useApp, useTicker } from "../../stores/app";
 import AudienceScene, { audienceStats } from "../audience/Audience";
 import { stopSession } from "./session";
@@ -138,6 +138,8 @@ export default function Live() {
 }
 
 function ZoneMap() {
+  const notes = useApp((st) => st.settings.notes);
+  const names = zoneNames(notes);
   const g = live.gaze;
   const hist = live.gazeHistory;
   const counts: Record<string, number> = { L: 0, C: 0, R: 0, N: 0, X: 0 };
@@ -147,10 +149,10 @@ function ZoneMap() {
     <div
       className={`zone-cell ${cls} ${g?.zone === z ? "on" : ""}`}
       style={{ color: `var(--zone-${z})` }}
-      title={ZONE_NAMES[z]}
+      title={names[z]}
     >
       <b>{Math.round((100 * counts[z]) / total)}%</b>
-      <span className="small">{ZONE_NAMES[z]}</span>
+      <span className="small">{names[z]}</span>
     </div>
   );
   return (

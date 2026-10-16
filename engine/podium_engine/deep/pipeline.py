@@ -131,7 +131,8 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
 
     # 8. gaze + engagement + scores
     progress("scoring", 0.0)
-    gaze = scoring.gaze_summary(read_ndjson(tel / "gaze.ndjson"), duration)
+    notes = bool(meta.get("notes", True))
+    gaze = scoring.gaze_summary(read_ndjson(tel / "gaze.ndjson"), duration, notes)
     eng = read_ndjson(tel / "engagement.ndjson")
     engagement = None
     if eng:
@@ -170,7 +171,8 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
         # "Too fast" only when the speed-up actually exceeds the target band, not merely the speaker's own median.
         + [{"t": z["t0"], "kind": "rush", "severity": 0.6} for z in pacing["accelZones"]
            if z["kind"] == "rush" and z["peakWpm"] > pc["band"][1]]
-        + [{"t": s["t0"], "kind": "notes_stare", "severity": 0.5} for s in (gaze or {}).get("notesStares", [])]
+        + [{"t": s["t0"], "kind": "notes_stare" if notes else "look_down", "severity": 0.5}
+           for s in (gaze or {}).get("notesStares", [])]
     )
     summary = {
         "schemaVersion": SCHEMA_VERSION, "sessionId": meta["sessionId"], "title": meta.get("title", ""),

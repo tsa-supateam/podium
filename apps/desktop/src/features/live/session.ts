@@ -22,6 +22,7 @@ export async function startSession(replayFrom: string | null = null): Promise<vo
     mode: "practice",
     targetDurationSec: s.targetMinutes ? s.targetMinutes * 60 : null,
     audienceSize: s.audienceSize,
+    notes: s.notes,
     replaySessionId: replayFrom,
     speed: 1,
     calibration: st.calibrated ? { zoneModel: st.zoneModel, gains: st.gains, flipYaw: s.flipYaw } : null,

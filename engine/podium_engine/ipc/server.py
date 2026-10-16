@@ -165,7 +165,8 @@ class Server:
             raise RuntimeError("a session is already running")
         sid = storage.new_session_id()
         sdir = storage.session_path(sid)
-        extra = {"targetDurationSec": d.get("targetDurationSec"), "audienceSize": d.get("audienceSize", 15)}
+        extra = {"targetDurationSec": d.get("targetDurationSec"), "audienceSize": d.get("audienceSize", 15),
+                 "notes": bool(d.get("notes", True))}
         title = d.get("title") or "Practice run"
         replay_from = d.get("replaySessionId")
         mode = "replay" if replay_from else d.get("mode", "practice")
@@ -183,6 +184,8 @@ class Server:
             src_dir = storage.session_path(replay_from) if not Path(replay_from).is_absolute() else Path(replay_from)
             wav = src_dir / "audio.wav" if src_dir.is_dir() else src_dir
             gaze = load_replay_gaze(src_dir) if src_dir.is_dir() else []
+            if (src_dir / "session.json").exists():  # a replay keeps the original run's notes setting
+                meta["notes"] = json.loads((src_dir / "session.json").read_text()).get("notes", True)
             eng = self.engine
 
             def on_gaze(g: dict, t: float) -> None:

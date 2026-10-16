@@ -14,18 +14,26 @@ YAW_BINS = (-40.0, 40.0, 2.0)
 PITCH_BINS = (-30.0, 20.0, 2.0)
 
 
-def gaze_summary(gaze: list[dict], duration: float) -> dict | None:
+# Without notes there is no reason to look down, so shorter downward looks count against you.
+STARE_SEC = {True: 5.0, False: 2.5}
+
+
+def gaze_summary(gaze: list[dict], duration: float, notes: bool = True) -> dict | None:
+    """`notes`: the speaker had notes or slides. If False, zone N means "looking down", not "reading"."""
     if len(gaze) < 30:
         return None
     gaze = sorted(gaze, key=lambda g: g["t"])
     ts = np.array([g["t"] for g in gaze])
     dt = np.clip(np.diff(ts, append=ts[-1] + 1 / 30), 0, 0.1)
-    zones = [g.get("zone", "X") if g.get("face", True) else "X" for g in gaze]
+    faces = [bool(g.get("face", True)) for g in gaze]
+    zones = [g.get("zone", "X") if f else "X" for g, f in zip(gaze, faces)]
     tot = {z: 0.0 for z in ("L", "C", "R", "N", "X")}
     for d, z in zip(dt, zones):
         tot[z] += float(d)
     all_t = sum(tot.values()) or 1.0
-    visible = all_t - tot["X"]
+    # Only "no face detected" is excluded. Looking away with the face visible (zone X) is real
+    # time off the audience and must count against eye contact.
+    visible = float(sum(d for d, f in zip(dt, faces) if f))
     zone_pct = {z: round(100 * v / all_t, 1) for z, v in tot.items()}
     shares = {z: v / all_t for z, v in tot.items()}
     aud = sum(tot[z] for z in AUDIENCE_ZONES)
@@ -39,7 +47,7 @@ def gaze_summary(gaze: list[dict], duration: float) -> dict | None:
         elif z != "N" and run_start is not None:
             dur = t - run_start
             longest = max(longest, dur)
-            if dur > 5:
+            if dur > STARE_SEC[notes]:
                 stares.append({"t0": round(float(run_start), 2), "t1": round(float(t), 2)})
             run_start = None
 
@@ -70,6 +78,7 @@ def gaze_summary(gaze: list[dict], duration: float) -> dict | None:
         "balanceEntropy": round(audience_entropy(shares), 3),
         "longestNotesStareSec": round(longest, 1),
         "notesStares": stares,
+        "notesMode": notes,
         "heatmap": {"yawBins": list(YAW_BINS), "pitchBins": list(PITCH_BINS),
                     "rows": int(hist.shape[0]), "cols": int(hist.shape[1]), "u8": enc},
         "timeline": timeline,
@@ -79,9 +88,11 @@ def gaze_summary(gaze: list[dict], duration: float) -> dict | None:
 def score_eye(g: dict | None) -> int | None:
     if not g:
         return None
+    notes = g.get("notesMode", True)
+    target = 0.75 if notes else 0.85  # no notes: nothing to read, so expect more audience time
     aud_frac = g["audiencePct"] / 100
-    s = 100 * clip01(aud_frac / 0.75) ** 0.7 * (0.7 + 0.3 * g["balanceEntropy"])
-    s -= min(20, 2 * len(g.get("notesStares", [])))
+    s = 100 * clip01(aud_frac / target) ** 0.7 * (0.7 + 0.3 * g["balanceEntropy"])
+    s -= min(20, (2 if notes else 3) * len(g.get("notesStares", [])))
     return int(round(max(0.0, s)))
 
 

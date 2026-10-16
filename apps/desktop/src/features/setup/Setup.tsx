@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cameraStream, startCamera, tracker } from "../../lib/camera";
 import { listMics, micLevelDb, startMic } from "../../lib/mic";
-import { ZONE_NAMES } from "../../lib/types";
+import { zoneNames } from "../../lib/types";
 import { live, useApp, useTicker } from "../../stores/app";
 import { startSession } from "../live/session";
 
@@ -60,7 +60,7 @@ export default function Setup() {
             <video ref={videoRef} autoPlay muted playsInline />
             <div className="badge">
               <span className={`pill ${faceOk ? "ok" : "warn"}`}>
-                <span className="dot" /> {faceOk ? `Face found · looking at ${ZONE_NAMES[g!.zone]}` : "Looking for your face…"}
+                <span className="dot" /> {faceOk ? `Face found · looking at ${zoneNames(settings.notes)[g!.zone]}` : "Looking for your face…"}
               </span>
             </div>
           </div>
@@ -97,6 +97,24 @@ export default function Setup() {
             <div className="field">
               <label>Title</label>
               <input value={settings.title} onChange={(e) => setSettings({ title: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Notes</label>
+              <div className="segmented" role="radiogroup" aria-label="Notes">
+                <button role="radio" aria-checked={settings.notes} className={settings.notes ? "on" : ""}
+                  onClick={() => setSettings({ notes: true })}>
+                  Using notes or slides
+                </button>
+                <button role="radio" aria-checked={!settings.notes} className={!settings.notes ? "on" : ""}
+                  onClick={() => setSettings({ notes: false })}>
+                  No notes
+                </button>
+              </div>
+              <span className="muted small">
+                {settings.notes
+                  ? "Glancing down at notes is expected. Looks over 5 s count against you."
+                  : "Looking down counts as looking away. Target: 85% eye contact."}
+              </span>
             </div>
             <div className="row">
               <div className="field" style={{ flex: 1 }}>
@@ -170,7 +188,7 @@ export default function Setup() {
           {!calibrated && (
             <p className="muted small">
               Without calibration, Podium uses default angles: 12° left or right of center counts as the side
-              audience, and looking down 15° counts as notes.
+              audience, and looking down 15° counts as {settings.notes ? "notes" : "looking down"}.
             </p>
           )}
         </div>

@@ -1,5 +1,5 @@
 // 4-point gaze calibration (spec §4.3.3): fit one Gaussian per zone in (yaw, pitch) space.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { tracker } from "../../lib/camera";
 import { fitZoneModel, gazeAngles, DEFAULT_GAINS, type ZoneModel } from "../../lib/gaze";
 import type { RawGaze } from "../../lib/faceTracker";
@@ -17,6 +17,8 @@ const SETTLE_MS = 700;
 
 export default function Calibration() {
   const { set, go, settings } = useApp();
+  // Without notes there is no notes target: the downward zone keeps its default position.
+  const steps = useMemo(() => (settings.notes ? STEPS : STEPS.filter((st) => st.zone !== "N")), [settings.notes]);
   const [step, setStep] = useState(-1);
   const [progress, setProgress] = useState(0);
   const samples = useRef<Record<Z, [number, number][]>>({ L: [], C: [], R: [], N: [] });
@@ -34,9 +36,9 @@ export default function Calibration() {
     let cancelled = false;
     (async () => {
       await sleep(1200);
-      for (let i = 0; i < STEPS.length && !cancelled; i++) {
+      for (let i = 0; i < steps.length && !cancelled; i++) {
         setStep(i);
-        current = STEPS[i].zone;
+        current = steps[i].zone;
         await sleep(SETTLE_MS);
         collecting = true;
         const t0 = performance.now();
@@ -48,9 +50,9 @@ export default function Calibration() {
         setProgress(1);
       }
       if (cancelled) return;
-      setStep(STEPS.length);
+      setStep(steps.length);
       const model: ZoneModel = fitZoneModel(samples.current);
-      const ok = (Object.keys(samples.current) as Z[]).every((z) => samples.current[z].length >= 10);
+      const ok = steps.every((st) => samples.current[st.zone].length >= 10);
       if (ok) {
         tracker.model = model;
         set({ zoneModel: model, calibrated: true, toast: "Gaze calibrated for this room" });
@@ -64,12 +66,12 @@ export default function Calibration() {
       cancelled = true;
       tracker.onRaw = prev;
     };
-  }, [go, set, settings.flipYaw]);
+  }, [go, set, settings.flipYaw, steps]);
 
-  const cur = STEPS[step];
+  const cur = steps[step];
   return (
     <div className="calib">
-      {STEPS.map((s, i) => (
+      {steps.map((s, i) => (
         <div
           key={s.zone}
           className={`calib-target ${i === step ? "active" : ""} ${i < step ? "done" : ""}`}
@@ -79,15 +81,15 @@ export default function Calibration() {
         </div>
       ))}
       <div className="calib-panel grid">
-        <h2>{step < 0 ? "Gaze calibration" : step >= STEPS.length ? "Done!" : `Look: ${cur.label}`}</h2>
+        <h2>{step < 0 ? "Gaze calibration" : step >= steps.length ? "Done!" : `Look: ${cur.label}`}</h2>
         <p className="muted">
           {step < 0
             ? "Stand where you will speak. Follow each highlighted target with your eyes and head, the way you would naturally."
-            : step >= STEPS.length
+            : step >= steps.length
               ? "Saving your room layout…"
               : cur.hint}
         </p>
-        {step >= 0 && step < STEPS.length && (
+        {step >= 0 && step < steps.length && (
           <div className="progress">
             <div style={{ width: `${progress * 100}%` }} />
           </div>

@@ -10,6 +10,11 @@ export const ZONE_NAMES: Record<Zone, string> = {
   X: "Away",
 };
 
+/** Zone names for a run. Without notes, the downward zone means "looking down", not "reading". */
+export function zoneNames(notes: boolean): Record<Zone, string> {
+  return notes ? ZONE_NAMES : { ...ZONE_NAMES, N: "Looking down" };
+}
+
 export interface Envelope<T = any> {
   v?: number;
   type: string;
@@ -123,6 +128,7 @@ export interface Summary {
     balanceEntropy: number;
     longestNotesStareSec: number;
     notesStares: { t0: number; t1: number }[];
+    notesMode?: boolean;
     heatmap: { yawBins: number[]; pitchBins: number[]; rows: number; cols: number; u8: string };
     timeline: [number, Zone][];
   };
@@ -143,7 +149,13 @@ export interface Summary {
   };
   keyphrases: { phrase: string; score: number; count: number; firstT: number | null; times: number[] }[];
   highlights: { t: number; kind: string; severity: number }[];
-  debrief: { text: string; strengths: any[]; growth: { text: string; t: number | null; metric: string }[]; drill: string | null };
+  debrief: {
+    text: string;
+    strengths: any[];
+    growth: DebriefItem[];
+    more?: DebriefItem[];
+    drill: string | null;
+  };
   debriefAudio?: string;
   analysisSec: number;
   noSpeech?: boolean;
@@ -182,4 +194,12 @@ export interface SessionRow {
   status: string;
   overall: number | null;
   scores: Scores | null;
+}
+
+export interface DebriefItem {
+  key: string;
+  metric: string;
+  text: string;
+  t: number | null;
+  drill?: string;
 }

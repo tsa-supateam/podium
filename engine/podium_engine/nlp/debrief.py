@@ -33,9 +33,10 @@ def _strengths(s: dict) -> list[Item]:
     sc, out = s["scores"], []
     g = s.get("gaze")
     if g and sc.get("eyeContact") is not None and sc["eyeContact"] >= 75:
+        target = 75 if g.get("notesMode", True) else 85
         out.append(Item("OPEN_STRONG_GAZE", "eyeContact", sc["eyeContact"] / 100,
-                        f"You spent {round(g['audiencePct'])} percent of your time looking at the audience, which is "
-                        f"above the 75 percent target."))
+                        f"You spent {round(g['audiencePct'])} percent of your time looking at the audience, "
+                        f"against a {target} percent target."))
     if sc["fillers"] >= 80:
         out.append(Item("OPEN_FEW_FILLERS", "fillers", sc["fillers"] / 100,
                         f"You kept filler words down to {s['fillers']['perMinute']:.1f} per minute. That is clean, "
@@ -104,10 +105,15 @@ def _growth(s: dict, keyphrase_at) -> list[Item]:
                          "Your voice jumped around a lot in pitch. ")
                         + "Let it rise on important words and fall at the end of each point to sound more engaged."))
     g = s.get("gaze")
+    notes = (g or {}).get("notesMode", True)
     if g and sc.get("eyeContact") is not None and sc["eyeContact"] < 70:
-        if g["zonePct"]["N"] > 25:
+        if notes and g["zonePct"]["N"] > 25:
             msg = (f"You looked at your notes {round(g['zonePct']['N'])} percent of the time. Aim to glance down, "
                    f"then deliver each sentence to a person.")
+        elif not notes and g["zonePct"]["N"] + g["zonePct"]["X"] > 15:
+            off = round(g["zonePct"]["N"] + g["zonePct"]["X"])
+            msg = (f"You looked down or away {off} percent of the time. With no notes, keep your eyes up on the "
+                   f"audience, even while you think.")
         else:
             side = min(("L", "R"), key=lambda z: g["zonePct"][z])
             name = "left" if side == "L" else "right"
@@ -123,7 +129,7 @@ def _growth(s: dict, keyphrase_at) -> list[Item]:
 
 DRILLS = {
     "fillers": "Drill: read your opening aloud and replace every filler with a one second pause.",
-    "pacing": "Drill: mark three key sentences in your notes and deliberately slow down on each one.",
+    "pacing": "Drill: pick three key sentences and deliberately slow down on each one.",
     "vocalVariety": "Drill: read one paragraph as if telling an exciting story to a ten year old, then keep half that energy.",
     "eyeContact": "Drill: pick three spots in the room, left, center and right, and deliver one full sentence to each in turn.",
     "structure": "Drill: write one sentence each for your opening hook, three main points and conclusion, then practice the transitions.",
@@ -139,15 +145,47 @@ def drill_for(item: Item) -> str:
     return DRILLS_BY_KEY.get(item.key, DRILLS[item.metric])
 
 
+# When nothing crosses a "fix this" threshold, still give the weakest area one concrete next step.
+LEVEL_UP = {  # metric: (name, next step)
+    "pacing": ("Speed", "Aim for a steady 140 to 160 words per minute."),
+    "fillers": ("Filler words", "Replace each one with a short silent pause."),
+    "vocalVariety": ("Voice", "Stress one key word in every sentence."),
+    "eyeContact": ("Eye contact", "Finish each sentence looking at one person."),
+    "structure": ("Structure", "Open with a question and close with a clear summary."),
+}
+
+
+def _level_up(summary: dict, exclude: set[str], below: float = 101) -> Item | None:
+    sc = summary["scores"]
+    scored = [(v, k) for k, v in sc.items()
+              if k in LEVEL_UP and k not in exclude and isinstance(v, (int, float)) and v < below]
+    if not scored:
+        return None
+    v, k = min(scored)
+    name, step = LEVEL_UP[k]
+    return Item(f"LEVEL_{k.upper()}", k, 0.1, f"{name} scored {round(v)} out of 100. {step}")
+
+
+def _as_dict(item: Item) -> dict:
+    return {**item.__dict__, "drill": drill_for(item)}
+
+
 def build(summary: dict, keyphrase_at) -> dict:
     strengths = _strengths(summary)
     growth = _growth(summary, keyphrase_at)
-    picked: list[Item] = []
+    distinct: list[Item] = []  # most severe first, one per metric
     for g in growth:
-        if all(g.metric != p.metric for p in picked):
-            picked.append(g)
-        if len(picked) == 2:
-            break
+        if all(g.metric != p.metric for p in distinct):
+            distinct.append(g)
+    # Always give one tip, and a second one when another area is still clearly improvable (< 90).
+    if not distinct and (lvl := _level_up(summary, set())):
+        distinct.append(lvl)
+    if len(distinct) == 1 and (lvl := _level_up(summary, {distinct[0].metric}, below=90)):
+        distinct.append(lvl)
+    # Any other area that is still weak (< 70) becomes a smaller tip for the dropdown.
+    while lvl := _level_up(summary, {d.metric for d in distinct}, below=70):
+        distinct.append(lvl)
+    picked, more = distinct[:2], distinct[2:]
     parts = []
     overall = summary["scores"]["overall"]
     parts.append(f"Here is your debrief. Your overall score is {overall} out of 100.")
@@ -163,7 +201,8 @@ def build(summary: dict, keyphrase_at) -> dict:
     return {
         "text": " ".join(parts),
         "strengths": [i.__dict__ for i in strengths[:2]],
-        "growth": [i.__dict__ for i in picked],
+        "growth": [_as_dict(i) for i in picked],  # the one or two headline tips, each with its own drill
+        "more": [_as_dict(i) for i in more],      # smaller critiques, shown in a dropdown
         "drill": drill_for(picked[0]) if picked else None,
     }
 
@@ -179,4 +218,4 @@ def no_speech(summary: dict) -> dict:
     g = summary.get("gaze")
     if g:
         text += f" Your eye contact was still tracked: {round(g['audiencePct'])} percent of your time went to the audience."
-    return {"text": text, "strengths": [], "growth": [], "drill": None}
+    return {"text": text, "strengths": [], "growth": [], "more": [], "drill": None}

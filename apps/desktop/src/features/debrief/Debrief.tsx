@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { engine } from "../../lib/engine";
-import type { Question, SessionBundle, Summary } from "../../lib/types";
+import type { DebriefItem, Question, SessionBundle, Summary } from "../../lib/types";
 import { useApp } from "../../stores/app";
 import { startSession } from "../live/session";
 import { METRICS, clusteringWord, firstSentence, speedChangeWord, steadinessWord, strengthLine, stripDrillLabel, voiceWord } from "../../lib/metrics";
@@ -172,37 +172,49 @@ function FixNext({ s, onSeek, onPlay, speaking, canPlay }: {
   speaking: boolean;
   canPlay: boolean;
 }) {
-  const [top, ...rest] = s.debrief.growth;
+  // Older sessions: up to 2 items in `growth`, one shared drill, no `more`.
+  const all = [...s.debrief.growth, ...(s.debrief.more ?? [])];
+  const headline = all.slice(0, 2);
+  const smaller = all.slice(2);
+  const drillOf = (g: DebriefItem, i: number) => g.drill ?? (i === 0 ? s.debrief.drill : null);
   const strength = s.debrief.strengths[0];
   return (
     <section className="card fix-next">
       <div className="row fix-head">
-        <h3>Fix this next</h3>
+        <h3>{headline.length > 1 ? "Fix these next" : "Fix this next"}</h3>
         <span className="spacer" />
-        <button className="icon-btn" onClick={onPlay} disabled={!canPlay} title={speaking ? "Stop" : "Play spoken debrief"}>
+        <button className="icon-btn" onClick={onPlay} disabled={!canPlay} title="Spoken debrief">
           {speaking ? "■ Stop" : "🔊 Play"}
         </button>
       </div>
-      {top ? (
-        <p className="fix-main">
-          {firstSentence(top.text)} <TimeChip t={top.t} onSeek={onSeek} />
-        </p>
-      ) : (
+      {headline.length === 0 && (
         <p className="fix-main">{s.noSpeech ? "Get your mic working, then run again." : "Nothing major. Keep practicing."}</p>
       )}
-      {s.debrief.drill && (
-        <p className="fix-try">
-          <span className="try-label">Try:</span> {stripDrillLabel(s.debrief.drill)}
-        </p>
-      )}
-      {strength && <p className="fix-strength">✓ {strengthLine(strength.metric, s)}</p>}
-      {rest.length > 0 && (
-        <details className="fix-more">
-          <summary>+{rest.length} more</summary>
-          <ul>
-            {rest.map((g) => (
-              <li key={g.text}>
+      <ol className="fix-list">
+        {headline.map((g, i) => {
+          const drill = drillOf(g, i);
+          return (
+            <li key={g.key + g.text}>
+              <p className="fix-main">
                 {firstSentence(g.text)} <TimeChip t={g.t} onSeek={onSeek} />
+              </p>
+              {drill && (
+                <p className="fix-try">
+                  <span className="try-label">Try:</span> {stripDrillLabel(drill)}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {strength && <p className="fix-strength">✓ {strengthLine(strength.metric, s)}</p>}
+      {smaller.length > 0 && (
+        <details className="fix-more">
+          <summary>+{smaller.length} smaller {smaller.length === 1 ? "tip" : "tips"}</summary>
+          <ul>
+            {smaller.map((g) => (
+              <li key={g.key + g.text}>
+                {g.text} <TimeChip t={g.t} onSeek={onSeek} />
               </li>
             ))}
           </ul>
@@ -213,7 +225,7 @@ function FixNext({ s, onSeek, onPlay, speaking, canPlay }: {
 }
 
 function Moments({ s, onSeek }: { s: Summary; onSeek: (t: number) => void }) {
-  const label: Record<string, string> = { filler_cluster: "Filler burst", monotone: "Flat voice", rush: "Too fast", notes_stare: "Long look at notes" };
+  const label: Record<string, string> = { filler_cluster: "Filler burst", monotone: "Flat voice", rush: "Too fast", notes_stare: "Long look at notes", look_down: "Looked down" };
   if (!s.highlights.length) return <p className="muted">No key moments. Nice and steady.</p>;
   return (
     <div className="moments">
@@ -279,19 +291,21 @@ function DetailedStats({ s }: { s: Summary }) {
 function GazeTab({ s }: { s: Summary }) {
   const g = s.gaze;
   if (!g) return <div className="card muted">No camera data was recorded for this session.</div>;
+  const notes = g.notesMode ?? true;
   return (
     <>
       <div className="card">
         <h3 style={{ marginBottom: 10 }}>Where you looked</h3>
         <GazeHeatmap g={g} />
+        {!notes && <p className="muted small" style={{ marginBottom: 0 }}>No-notes run: looking down counts as looking away.</p>}
       </div>
       <div className="card grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        <ZoneBars pct={g.zonePct} />
+        <ZoneBars pct={g.zonePct} notes={notes} />
         <div className="kv">
           <span>On audience</span><span>{g.audiencePct}%</span>
           <span>Spread across room</span><span>{Math.round(g.balanceEntropy * 100)}%</span>
-          <span>Longest notes look</span><span>{g.longestNotesStareSec}s</span>
-          <span>Notes looks &gt; 5 s</span><span>{g.notesStares.length}</span>
+          <span>{notes ? "Longest notes look" : "Longest look down"}</span><span>{g.longestNotesStareSec}s</span>
+          <span>{notes ? "Notes looks > 5 s" : "Looks down > 2.5 s"}</span><span>{g.notesStares.length}</span>
           <span>Face visible</span><span>{Math.round(g.faceVisibleFrac * 100)}%</span>
         </div>
       </div>

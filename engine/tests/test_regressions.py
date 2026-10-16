@@ -60,3 +60,54 @@ def test_slow_speaker_is_told_to_speed_up_not_warned_about_rushing():
 def test_rush_tip_still_used_when_average_is_on_target():
     d = debrief.build(_summary(150.0, 72, rush_peak=200.0), lambda t: None)
     assert any(g["key"] == "GROW_RUSH" for g in d["growth"])
+
+
+def test_feedback_always_has_a_headline_tip_with_its_own_drill():
+    s = _summary(150.0, 95)
+    s["scores"].update(fillers=100, vocalVariety=95, eyeContact=96, structure=90)
+    s["structure"]["conclusionDetected"] = True
+    d = debrief.build(s, lambda t: None)
+    assert len(d["growth"]) >= 1 and d["growth"][0]["drill"]
+    assert d["growth"][0]["key"] == "LEVEL_STRUCTURE"  # lowest score gets the level-up tip
+
+
+def test_two_headline_tips_and_the_rest_in_more():
+    s = _summary(75.6, 4)
+    s["scores"].update(vocalVariety=40, eyeContact=50, structure=50)
+    s["structure"]["conclusionDetected"] = False
+    d = debrief.build(s, lambda t: None)
+    assert len(d["growth"]) == 2 and len(d["more"]) >= 1
+    assert all(g["drill"] for g in d["growth"] + d["more"])
+    metrics = [g["metric"] for g in d["growth"] + d["more"]]
+    assert len(metrics) == len(set(metrics))
+
+
+def test_no_notes_mode_is_stricter_and_names_looking_down():
+    from podium_engine.deep import scoring
+
+    g = {"audiencePct": 80.0, "balanceEntropy": 1.0, "notesStares": [{"t0": 1, "t1": 4}], "notesMode": True}
+    with_notes = scoring.score_eye(g)
+    without = scoring.score_eye({**g, "notesMode": False})
+    assert without < with_notes
+
+    s = _summary(150.0, 90)
+    s["scores"]["eyeContact"] = 55
+    s["gaze"] = {"audiencePct": 70, "notesMode": False, "zonePct": {"L": 20, "C": 40, "R": 10, "N": 25, "X": 5}}
+    texts = [g["text"] for g in debrief.build(s, lambda t: None)["growth"]]
+    assert any("looked down or away 30 percent" in t for t in texts)
+    assert not any("your notes" in t for t in texts)
+
+
+def test_looking_away_with_face_visible_counts_against_eye_contact():
+    from podium_engine.deep import scoring
+
+    # 100 samples on the audience, 100 looking away with the face still visible
+    gaze = [{"t": i / 30, "face": True, "zone": "C" if i < 100 else "X", "gYaw": 0, "gPitch": 0} for i in range(200)]
+    g = scoring.gaze_summary(gaze, 200 / 30)
+    assert 45 <= g["audiencePct"] <= 55
+
+
+def test_second_tip_comes_from_weakest_remaining_area():
+    s = _summary(75.6, 4)  # only the slow-speed tip triggers; structure is 50
+    d = debrief.build(s, lambda t: None)
+    assert [g["key"] for g in d["growth"]] == ["GROW_SLOW", "LEVEL_STRUCTURE"]

@@ -57,9 +57,9 @@ export const METRICS: MetricInfo[] = [
     title: "Eye contact",
     what: "How much of the time you looked at your audience instead of your notes, and whether you spread it across the room.",
     how: [
-      "Full credit for looking at the audience at least 75% of the time.",
+      "Full credit for looking at the audience at least 75% of the time (85% in a no-notes run).",
       "Up to 30% of the score depends on spreading your gaze across the left, center and right of the room.",
-      "Minus 2 points for each time you looked at your notes for more than 5 seconds in a row.",
+      "With notes: minus 2 points per notes look over 5 seconds. No notes: minus 3 points per look down over 2.5 seconds.",
     ],
     measured: (s) => (s.gaze ? `${Math.round(s.gaze.audiencePct)}% of the time on your audience` : "Camera was off"),
   },

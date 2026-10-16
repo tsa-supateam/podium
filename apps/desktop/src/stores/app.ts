@@ -14,6 +14,7 @@ export interface Settings {
   flipYaw: boolean;
   showCamera: boolean;
   audioDevice: string | null; // browser deviceId
+  notes: boolean; // speaking with notes/slides (false: looking down counts as looking away)
 }
 
 interface AppState {
@@ -57,6 +58,7 @@ export const useApp = create<AppState>((set, get) => ({
     flipYaw: false,
     showCamera: true,
     audioDevice: null,
+    notes: true,
     ...savedSettings(),
   },
   calibrated: false,

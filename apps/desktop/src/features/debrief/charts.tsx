@@ -168,7 +168,7 @@ export function Timeline({ s, current, onSeek }: TimelineProps) {
         <span><i style={{ background: "#ff6b6b" }} />um / uh</span>
         <span><i style={{ background: "#ff9f6b" }} />like / you know</span>
         {(["L", "C", "R", "N", "X"] as Zone[]).map((z) => (
-          <span key={z}><i style={{ background: ZONE_COLOR[z] }} />{{ L: "left", C: "center", R: "right", N: "notes", X: "away" }[z]}</span>
+          <span key={z}><i style={{ background: ZONE_COLOR[z] }} />{{ L: "left", C: "center", R: "right", N: s.gaze?.notesMode === false ? "down" : "notes", X: "away" }[z]}</span>
         ))}
       </div>
     </div>
@@ -216,7 +216,7 @@ export function GazeHeatmap({ g }: { g: NonNullable<Summary["gaze"]> }) {
     ctx.fillText(`LEFT ${g.zonePct.L}%`, X(-26), 22);
     ctx.fillText(`CENTER ${g.zonePct.C}%`, X(0), 22);
     ctx.fillText(`RIGHT ${g.zonePct.R}%`, X(26), 22);
-    ctx.fillText(`NOTES / SLIDES ${g.zonePct.N}%`, W / 2, H - 14);
+    ctx.fillText(`${g.notesMode === false ? "LOOKING DOWN" : "NOTES / SLIDES"} ${g.zonePct.N}%`, W / 2, H - 14);
   }, [g]);
   return <canvas ref={ref} style={{ width: "100%", maxWidth: 640, display: "block", margin: "0 auto", borderRadius: 12, border: "1px solid var(--line)" }} />;
 }
@@ -230,8 +230,8 @@ function heat(v: number): string {
   return `rgba(${c[0]},${c[1]},${c[2]},${0.35 + 0.65 * v})`;
 }
 
-export function ZoneBars({ pct }: { pct: Record<Zone, number> }) {
-  const names: Record<Zone, string> = { L: "Left audience", C: "Center audience", R: "Right audience", N: "Notes / slides", X: "Away / no face" };
+export function ZoneBars({ pct, notes = true }: { pct: Record<Zone, number>; notes?: boolean }) {
+  const names: Record<Zone, string> = { L: "Left audience", C: "Center audience", R: "Right audience", N: notes ? "Notes / slides" : "Looking down", X: "Away / no face" };
   return (
     <div className="grid" style={{ gap: 8 }}>
       {(["L", "C", "R", "N", "X"] as Zone[]).map((z) => (
