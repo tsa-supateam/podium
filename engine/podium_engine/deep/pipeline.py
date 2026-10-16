@@ -167,7 +167,9 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
     highlights = (
         [{"t": c["t0"], "kind": "filler_cluster", "severity": min(1.0, 0.2 * c["count"])} for c in clusters]
         + [{"t": m["t0"], "kind": "monotone", "severity": 0.6} for m in voice["monotoneSegments"]]
-        + [{"t": z["t0"], "kind": "rush", "severity": 0.6} for z in pacing["accelZones"] if z["kind"] == "rush"]
+        # "Too fast" only when the speed-up actually exceeds the target band, not merely the speaker's own median.
+        + [{"t": z["t0"], "kind": "rush", "severity": 0.6} for z in pacing["accelZones"]
+           if z["kind"] == "rush" and z["peakWpm"] > pc["band"][1]]
         + [{"t": s["t0"], "kind": "notes_stare", "severity": 0.5} for s in (gaze or {}).get("notesStares", [])]
     )
     summary = {

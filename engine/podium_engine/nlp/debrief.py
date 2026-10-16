@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .. import config as cfgmod
+
 
 def mmss(t: float) -> str:
     t = max(0, int(round(t)))
@@ -67,19 +69,29 @@ def _growth(s: dict, keyphrase_at) -> list[Item]:
                         f"You used {f['total']} filler words, most often \"{top}\". Pausing silently sounds more "
                         f"confident than filling the gap."))
     p = s["pacing"]
+    lo, hi = cfgmod.load()["pace"]["band"]
+    mean = p.get("meanWpm", 0)
     rush = [z for z in p.get("accelZones", []) if z["kind"] == "rush"]
-    if rush:
+    if mean and mean < lo:
+        # Too slow overall is the real problem. A "rush" zone here is only fast relative to a slow
+        # median (a slow speaker's 131 WPM looks like +78%), so it must not be the pacing tip.
+        out.append(Item("GROW_SLOW", "pacing", 1.3 - (sc["pacing"] or 0) / 100,
+                        f"You spoke at {round(mean)} words per minute on average, below the {lo} to {hi} target. "
+                        f"Pick up the pace and keep your pauses short."))
+    elif mean > hi:
+        out.append(Item("GROW_FAST", "pacing", 1.3 - (sc["pacing"] or 0) / 100,
+                        f"You spoke at {round(mean)} words per minute on average, above the {lo} to {hi} target. "
+                        f"Slow down so key points can land."))
+    elif rush:
         z = max(rush, key=lambda z: z["peakWpm"])
         pct = round(100 * (z["peakWpm"] / max(p["medianWpm"], 1) - 1))
         out.append(Item("GROW_RUSH", "pacing", 0.4 + pct / 100,
                         f"Your pace climbed to {round(z['peakWpm'])} words per minute between {mmss(z['t0'])} and "
                         f"{mmss(z['t1'])}, about {pct} percent faster than your usual pace.", z["t0"]))
-    elif p.get("meanWpm", 0) and sc["pacing"] < 70:
-        fast = p["meanWpm"] > 160
+    elif mean and sc["pacing"] < 70:
         out.append(Item("GROW_PACE", "pacing", 1 - sc["pacing"] / 100,
-                        f"Your average pace was {round(p['meanWpm'])} words per minute. "
-                        + ("Slow down a little so key points can land." if fast else
-                           "Pick up the pace slightly to keep energy up.")))
+                        f"Your average pace was {round(mean)} words per minute, but your speed was uneven. "
+                        f"Aim for a steady rhythm, slowing only for key points."))
     v = s["voice"]
     if v.get("monotoneSegments"):
         m = max(v["monotoneSegments"], key=lambda m: m["t1"] - m["t0"])
@@ -117,6 +129,15 @@ DRILLS = {
     "structure": "Drill: write one sentence each for your opening hook, three main points and conclusion, then practice the transitions.",
 }
 
+# A drill that fits the specific problem, where the per-metric drill would be wrong.
+DRILLS_BY_KEY = {
+    "GROW_SLOW": "Drill: read one paragraph against a timer at about two and a half words per second, then match that pace from memory.",
+}
+
+
+def drill_for(item: Item) -> str:
+    return DRILLS_BY_KEY.get(item.key, DRILLS[item.metric])
+
 
 def build(summary: dict, keyphrase_at) -> dict:
     strengths = _strengths(summary)
@@ -135,7 +156,7 @@ def build(summary: dict, keyphrase_at) -> dict:
     if picked:
         parts.append("Two things to work on." if len(picked) == 2 else "One thing to work on.")
         parts.extend(p.text for p in picked)
-        parts.append(DRILLS[picked[0].metric])
+        parts.append(drill_for(picked[0]))
     else:
         parts.append("There is nothing major to fix. Keep practicing to make it automatic.")
     parts.append("Keep going. Every run makes the next one easier.")
@@ -143,7 +164,7 @@ def build(summary: dict, keyphrase_at) -> dict:
         "text": " ".join(parts),
         "strengths": [i.__dict__ for i in strengths[:2]],
         "growth": [i.__dict__ for i in picked],
-        "drill": DRILLS[picked[0].metric] if picked else None,
+        "drill": drill_for(picked[0]) if picked else None,
     }
 
 

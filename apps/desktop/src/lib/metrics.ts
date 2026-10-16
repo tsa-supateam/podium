@@ -6,6 +6,8 @@ export type MetricKey = "pacing" | "fillers" | "vocalVariety" | "eyeContact" | "
 export interface MetricInfo {
   key: MetricKey;
   title: string;
+  /** Chip label, at most two short words. */
+  short: string;
   /** What it means, in one sentence a first-time user understands. */
   what: string;
   /** How the 0–100 score is calculated. */
@@ -17,6 +19,7 @@ export interface MetricInfo {
 export const METRICS: MetricInfo[] = [
   {
     key: "pacing",
+    short: "Speed",
     title: "Speaking speed",
     what: "How fast you talked. 130–170 words per minute is easiest for an audience to follow.",
     how: [
@@ -28,6 +31,7 @@ export const METRICS: MetricInfo[] = [
   },
   {
     key: "fillers",
+    short: "Fillers",
     title: "Filler words",
     what: "How often you said “um”, “uh”, “like”, “you know” and similar words that fill silence.",
     how: [
@@ -38,6 +42,7 @@ export const METRICS: MetricInfo[] = [
   },
   {
     key: "vocalVariety",
+    short: "Voice",
     title: "Expressive voice",
     what: "How much your voice rose and fell in pitch and volume. A flat, same-sounding voice makes audiences tune out.",
     how: [
@@ -48,6 +53,7 @@ export const METRICS: MetricInfo[] = [
   },
   {
     key: "eyeContact",
+    short: "Eye contact",
     title: "Eye contact",
     what: "How much of the time you looked at your audience instead of your notes, and whether you spread it across the room.",
     how: [
@@ -59,6 +65,7 @@ export const METRICS: MetricInfo[] = [
   },
   {
     key: "structure",
+    short: "Structure",
     title: "Organization",
     what: "Whether your talk had a clear beginning, middle and end that listeners could follow.",
     how: [
@@ -106,4 +113,33 @@ export function clusteringWord(b: number, total: number): string {
 
 export function scoreOf(scores: Scores, key: MetricKey): number | null {
   return scores[key];
+}
+
+/** One-line strength for the takeaway card, e.g. "Kept fillers to 0.5/min". */
+export function strengthLine(metric: string, s: Summary): string {
+  switch (metric) {
+    case "eyeContact":
+      return `${Math.round(s.gaze?.audiencePct ?? 0)}% eye contact with the audience`;
+    case "fillers":
+      return `Kept fillers to ${s.fillers.perMinute.toFixed(1)}/min`;
+    case "pacing":
+      return `Good speed: ${Math.round(s.pacing.meanWpm)} words/min`;
+    case "vocalVariety":
+      return "Expressive, varied voice";
+    case "structure":
+      return "Clear structure";
+    default:
+      return "";
+  }
+}
+
+/** First sentence only: the takeaway card shows one idea per line. */
+export function firstSentence(text: string): string {
+  const m = text.match(/^.*?[.!?](\s|$)/);
+  return (m ? m[0] : text).trim();
+}
+
+export function stripDrillLabel(drill: string): string {
+  const d = drill.replace(/^Drill:\s*/i, "");
+  return d.charAt(0).toUpperCase() + d.slice(1);
 }

@@ -218,7 +218,7 @@ export function GazeHeatmap({ g }: { g: NonNullable<Summary["gaze"]> }) {
     ctx.fillText(`RIGHT ${g.zonePct.R}%`, X(26), 22);
     ctx.fillText(`NOTES / SLIDES ${g.zonePct.N}%`, W / 2, H - 14);
   }, [g]);
-  return <canvas ref={ref} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--line)" }} />;
+  return <canvas ref={ref} style={{ width: "100%", maxWidth: 640, display: "block", margin: "0 auto", borderRadius: 12, border: "1px solid var(--line)" }} />;
 }
 
 function heat(v: number): string {

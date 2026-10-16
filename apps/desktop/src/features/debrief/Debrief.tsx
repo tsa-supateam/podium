@@ -3,7 +3,7 @@ import { engine } from "../../lib/engine";
 import type { Question, SessionBundle, Summary } from "../../lib/types";
 import { useApp } from "../../stores/app";
 import { startSession } from "../live/session";
-import { METRICS, clusteringWord, speedChangeWord, steadinessWord, verdict, voiceWord } from "../../lib/metrics";
+import { METRICS, clusteringWord, firstSentence, speedChangeWord, steadinessWord, strengthLine, stripDrillLabel, voiceWord } from "../../lib/metrics";
 import { GazeHeatmap, ScoreRing, Timeline, ZoneBars, scoreColor } from "./charts";
 
 type Tab = "overview" | "timeline" | "gaze" | "transcript" | "qa";
@@ -72,13 +72,21 @@ export default function Debrief() {
     }
   };
 
+  const tabs: [Tab, string][] = [
+    ["overview", "Overview"],
+    ["gaze", "Eye contact"],
+    ["timeline", "Timeline"],
+    ["transcript", "Transcript"],
+    ["qa", "Q&A practice"],
+  ];
+
   return (
-    <div className="page">
-      <div className="row" style={{ marginBottom: 14 }}>
+    <div className="page debrief">
+      <div className="row debrief-title">
         <div>
           <h1>{s.title || "Debrief"}</h1>
           <div className="muted small">
-            {fmt(s.durationSec)} · {s.wordCount} words · analyzed on-device in {s.analysisSec}s
+            {fmt(s.durationSec)} · {s.wordCount} words
           </div>
         </div>
         <span className="spacer" />
@@ -87,165 +95,184 @@ export default function Debrief() {
       </div>
 
       {s.noSpeech && (
-        <div className="card" style={{ borderColor: "var(--bad)", marginBottom: 16 }}>
-          <b style={{ color: "var(--bad)" }}>No speech was detected in this run.</b>{" "}
-          <span className="muted">
-            Speech scores are skipped. Check the microphone meter on the setup screen and the microphone permission in
-            System Settings → Privacy &amp; Security → Microphone.
-          </span>
+        <div className="card warn-card">
+          <b>No speech detected.</b> <span className="muted">Check the mic meter on the setup screen and System Settings → Privacy &amp; Security → Microphone.</span>
         </div>
       )}
-      <div className="debrief-head">
-        <ScoreRing score={s.scores.overall} grade={s.scores.grade} />
-        <div className="grid" style={{ gap: 14 }}>
-          <div className="subscores">
+
+      <section className="hero-row">
+        <div className="hero-score">
+          <ScoreRing score={s.scores.overall} grade={s.scores.grade} />
+          <div className="chips">
             {METRICS.map((m) => {
               const v = s.scores[m.key];
               return (
-                <div className="subscore" key={m.key}>
-                  <span className="subscore-title">{m.title}</span>
-                  <div className="row" style={{ gap: 6, alignItems: "baseline" }}>
-                    <b style={{ color: v == null ? "var(--faint)" : scoreColor(v) }}>{v ?? "–"}</b>
-                    {v != null && <span className="muted small">/ 100</span>}
-                    <span className="verdict" style={{ color: v == null ? "var(--faint)" : scoreColor(v) }}>{verdict(v)}</span>
-                  </div>
-                  <span className="small">{m.measured(s)}</span>
-                  <span className="muted small">{m.what}</span>
-                  <details className="how">
-                    <summary>How is this scored?</summary>
-                    <ul>
-                      {m.how.map((h) => (
-                        <li key={h}>{h}</li>
-                      ))}
-                    </ul>
-                  </details>
+                <div className="chip" key={m.key} title={m.what}>
+                  <span className="chip-label">{m.short}</span>
+                  <b style={{ color: v == null ? "var(--faint)" : scoreColor(v) }}>{v ?? "–"}</b>
                 </div>
               );
             })}
           </div>
-          <div className="card row" style={{ alignItems: "flex-start" }}>
-            <button className="btn primary" onClick={playVoice} disabled={!voiceUrl} style={{ whiteSpace: "nowrap" }}>
-              {speaking ? "■ Stop" : "🔊 Play debrief"}
-            </button>
-            <p style={{ margin: 0 }}>{s.debrief.text}</p>
-            {voiceUrl && <audio ref={voiceRef} src={voiceUrl} onEnded={() => setSpeaking(false)} />}
-          </div>
         </div>
-      </div>
+        <div className="card flush hero-media">
+          {mediaUrl?.kind === "video" ? (
+            <video ref={mediaRef} className="media" src={mediaUrl.url} controls onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
+          ) : mediaUrl ? (
+            <div className="audio-only">
+              <audio ref={mediaRef} src={mediaUrl.url} controls onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
+            </div>
+          ) : (
+            <div className="audio-only muted small">Loading recording…</div>
+          )}
+        </div>
+      </section>
+
+      <FixNext s={s} onSeek={seek} onPlay={playVoice} speaking={speaking} canPlay={!!voiceUrl} />
+      {voiceUrl && <audio ref={voiceRef} src={voiceUrl} onEnded={() => setSpeaking(false)} />}
 
       <div className="tabs">
-        {([["overview", "Overview"], ["timeline", "Timeline"], ["gaze", "Eye contact"], ["transcript", "Transcript"], ["qa", "Q&A practice"]] as [Tab, string][]).map(
-          ([k, label]) => (
-            <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>
-              {label}
-            </button>
-          ),
-        )}
+        {tabs.map(([k, label]) => (
+          <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>
+            {label}
+          </button>
+        ))}
       </div>
 
-      <div className="two-col" style={{ gridTemplateColumns: tab === "timeline" ? "1fr" : undefined }}>
-        <div className="grid" style={{ alignContent: "start" }}>
-          {tab === "overview" && <Overview s={s} onSeek={seek} />}
-          {tab === "timeline" && (
-            <div className="card">
-              <Timeline s={s} current={now} onSeek={seek} />
-            </div>
-          )}
-          {tab === "gaze" && <GazeTab s={s} />}
-          {tab === "transcript" && <TranscriptTab bundle={bundle} now={now} onSeek={seek} />}
-          {tab === "qa" && <QATab sid={sid!} questions={bundle.questions?.questions ?? []} files={bundle.files} />}
-        </div>
-        <div className="grid" style={{ alignContent: "start" }}>
-          <div className="card flush">
-            {mediaUrl?.kind === "video" ? (
-              <video ref={mediaRef} className="media" src={mediaUrl.url} controls onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
-            ) : mediaUrl ? (
-              <div style={{ padding: 14 }}>
-                <audio ref={mediaRef} src={mediaUrl.url} controls style={{ width: "100%" }} onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
-              </div>
-            ) : (
-              <div style={{ padding: 14 }} className="muted small">Loading recording…</div>
-            )}
+      <div className="grid" style={{ alignContent: "start" }}>
+        {tab === "overview" && <Moments s={s} onSeek={seek} />}
+        {tab === "gaze" && <GazeTab s={s} />}
+        {tab === "timeline" && (
+          <div className="card">
+            <Timeline s={s} current={now} onSeek={seek} />
           </div>
-          {tab !== "timeline" && (
-            <div className="card">
-              <h3 style={{ marginBottom: 10 }}>Key moments</h3>
-              <Moments s={s} onSeek={seek} />
-            </div>
-          )}
-        </div>
+        )}
+        {tab === "transcript" && <TranscriptTab bundle={bundle} now={now} onSeek={seek} />}
+        {tab === "qa" && <QATab sid={sid!} questions={bundle.questions?.questions ?? []} files={bundle.files} />}
       </div>
+
+      <DetailedStats s={s} />
     </div>
   );
 }
 
-function Overview({ s, onSeek }: { s: Summary; onSeek: (t: number) => void }) {
+function TimeChip({ t, onSeek }: { t: number | null; onSeek: (t: number) => void }) {
+  if (t == null) return null;
   return (
-    <>
-      <div className="card">
-        <h3 style={{ marginBottom: 10 }}>Your feedback</h3>
-        <ul className="growth">
-          {s.debrief.strengths.slice(0, 1).map((g: any) => (
-            <li key={g.key} className="strength">{g.text}</li>
-          ))}
-          {s.debrief.growth.map((g) => (
-            <li key={g.text} onClick={() => g.t != null && onSeek(g.t)} style={{ cursor: g.t != null ? "pointer" : undefined }}>
-              {g.text} {g.t != null && <span className="muted small">▶ {fmt(g.t)}</span>}
-            </li>
-          ))}
-          {s.debrief.drill && <li>{s.debrief.drill}</li>}
-        </ul>
+    <button className="ts-chip" onClick={() => onSeek(t)} title="Play from here">
+      ▶ {fmt(t)}
+    </button>
+  );
+}
+
+function FixNext({ s, onSeek, onPlay, speaking, canPlay }: {
+  s: Summary;
+  onSeek: (t: number) => void;
+  onPlay: () => void;
+  speaking: boolean;
+  canPlay: boolean;
+}) {
+  const [top, ...rest] = s.debrief.growth;
+  const strength = s.debrief.strengths[0];
+  return (
+    <section className="card fix-next">
+      <div className="row fix-head">
+        <h3>Fix this next</h3>
+        <span className="spacer" />
+        <button className="icon-btn" onClick={onPlay} disabled={!canPlay} title={speaking ? "Stop" : "Play spoken debrief"}>
+          {speaking ? "■ Stop" : "🔊 Play"}
+        </button>
       </div>
-      <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        <div className="card">
-          <h3 style={{ marginBottom: 10 }}>Speaking speed</h3>
-          <div className="kv">
-            <span title="Words per minute across the whole talk, including pauses">Average speed</span>
-            <span>{Math.round(s.pacing.meanWpm)} words/min</span>
-            <span title="Speed counting only the time you were actually talking">Speed while talking</span>
-            <span>{Math.round(s.pacing.articulationRate)} words/min</span>
-            <span title="Slowing down for key points is good; huge swings are not">Speed changes</span>
-            <span>{speedChangeWord(s.pacing.cv)}</span>
-            <span title="Whether you kept a steady rhythm or sped up and stalled">Rhythm</span>
-            <span>{steadinessWord(s.pacing.npvi)}</span>
-            <span>Time spent pausing</span>
-            <span>{Math.round(s.pacing.pauseRatio * 100)}%</span>
-            <span>Pauses longer than 2 seconds</span>
-            <span>{s.pacing.longPauses.length}</span>
-          </div>
-          <p className="muted small" style={{ marginBottom: 0 }}>Target: 130–170 words per minute.</p>
-        </div>
-        <div className="card">
-          <h3 style={{ marginBottom: 10 }}>Filler words &amp; voice</h3>
-          <div className="kv">
-            {Object.entries(s.fillers.byToken).flatMap(([k, v]) => [<span key={`${k}-k`}>“{k}”</span>, <span key={`${k}-v`}>{v}×</span>])}
-            <span>Filler pattern</span>
-            <span>{clusteringWord(s.fillers.burstiness, s.fillers.total)}</span>
-            <span title="How much your pitch rose and fell">Voice pitch</span>
-            <span>{voiceWord(s.voice.f0StdSt)}</span>
-            <span title="How much your volume changed for emphasis">Volume changes</span>
-            <span>{s.voice.rmsDbStd >= 4 ? "Good emphasis" : s.voice.rmsDbStd >= 2 ? "Some emphasis" : "Mostly the same volume"}</span>
-            <span title="The middle of your natural speaking pitch">Typical pitch</span>
-            <span>{Math.round(s.voice.f0MedianHz)} Hz</span>
-          </div>
-        </div>
-      </div>
-    </>
+      {top ? (
+        <p className="fix-main">
+          {firstSentence(top.text)} <TimeChip t={top.t} onSeek={onSeek} />
+        </p>
+      ) : (
+        <p className="fix-main">{s.noSpeech ? "Get your mic working, then run again." : "Nothing major. Keep practicing."}</p>
+      )}
+      {s.debrief.drill && (
+        <p className="fix-try">
+          <span className="try-label">Try:</span> {stripDrillLabel(s.debrief.drill)}
+        </p>
+      )}
+      {strength && <p className="fix-strength">✓ {strengthLine(strength.metric, s)}</p>}
+      {rest.length > 0 && (
+        <details className="fix-more">
+          <summary>+{rest.length} more</summary>
+          <ul>
+            {rest.map((g) => (
+              <li key={g.text}>
+                {firstSentence(g.text)} <TimeChip t={g.t} onSeek={onSeek} />
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
   );
 }
 
 function Moments({ s, onSeek }: { s: Summary; onSeek: (t: number) => void }) {
-  const label: Record<string, string> = { filler_cluster: "Several filler words close together", monotone: "Voice went flat", rush: "Talking too fast", notes_stare: "Long look at notes" };
-  if (!s.highlights.length) return <p className="muted small">Nothing stood out. Nice and steady.</p>;
+  const label: Record<string, string> = { filler_cluster: "Filler burst", monotone: "Flat voice", rush: "Too fast", notes_stare: "Long look at notes" };
+  if (!s.highlights.length) return <p className="muted">No key moments. Nice and steady.</p>;
   return (
-    <div className="grid" style={{ gap: 6 }}>
-      {s.highlights.slice(0, 8).map((h, i) => (
-        <button key={i} className="btn ghost row" style={{ justifyContent: "space-between" }} onClick={() => onSeek(h.t)}>
+    <div className="moments">
+      {s.highlights.slice(0, 10).map((h, i) => (
+        <button key={i} className="moment" onClick={() => onSeek(h.t)}>
           <span>{label[h.kind] ?? h.kind}</span>
           <span className="mono muted">▶ {fmt(h.t)}</span>
         </button>
       ))}
     </div>
+  );
+}
+
+function DetailedStats({ s }: { s: Summary }) {
+  return (
+    <details className="card detailed-stats">
+      <summary>Detailed stats</summary>
+      <div className="stats-grid">
+        <div>
+          <h3>Speaking speed</h3>
+          <div className="kv">
+            <span>Average</span><span>{Math.round(s.pacing.meanWpm)} words/min</span>
+            <span>Target</span><span>130–170 words/min</span>
+            <span>While talking</span><span>{Math.round(s.pacing.articulationRate)} words/min</span>
+            <span>Speed changes</span><span>{speedChangeWord(s.pacing.cv)}</span>
+            <span>Rhythm</span><span>{steadinessWord(s.pacing.npvi)}</span>
+            <span>Time pausing</span><span>{Math.round(s.pacing.pauseRatio * 100)}%</span>
+            <span>Pauses &gt; 2 s</span><span>{s.pacing.longPauses.length}</span>
+          </div>
+        </div>
+        <div>
+          <h3>Fillers &amp; voice</h3>
+          <div className="kv">
+            {Object.entries(s.fillers.byToken).flatMap(([k, v]) => [<span key={`${k}-k`}>“{k}”</span>, <span key={`${k}-v`}>{v}×</span>])}
+            <span>Per minute</span><span>{s.fillers.perMinute.toFixed(1)}</span>
+            <span>Pattern</span><span>{clusteringWord(s.fillers.burstiness, s.fillers.total)}</span>
+            <span>Burstiness</span><span>{s.fillers.burstiness}</span>
+            <span>Pitch movement</span><span>{voiceWord(s.voice.f0StdSt)} ({s.voice.f0StdSt} st)</span>
+            <span>Volume changes</span><span>{s.voice.rmsDbStd} dB</span>
+            <span>Typical pitch</span><span>{Math.round(s.voice.f0MedianHz)} Hz</span>
+          </div>
+        </div>
+      </div>
+      <h3 style={{ marginTop: 18 }}>How it's scored</h3>
+      <div className="how-grid">
+        {METRICS.map((m) => (
+          <div key={m.key}>
+            <b>
+              {m.title} · {s.scores[m.key] ?? "–"}/100
+            </b>
+            <ul>
+              {m.how.map((h) => (
+                <li key={h}>{h}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -255,17 +282,16 @@ function GazeTab({ s }: { s: Summary }) {
   return (
     <>
       <div className="card">
-        <h3 style={{ marginBottom: 10 }}>Gaze heatmap</h3>
+        <h3 style={{ marginBottom: 10 }}>Where you looked</h3>
         <GazeHeatmap g={g} />
-        <p className="muted small">Where your gaze landed (your left is on the left), with the zone boundaries overlaid.</p>
       </div>
       <div className="card grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <ZoneBars pct={g.zonePct} />
         <div className="kv">
-          <span>Audience eye contact</span><span>{g.audiencePct}%</span>
-          <span>Spread across the room</span><span>{Math.round(g.balanceEntropy * 100)}%</span>
-          <span>Longest look at notes</span><span>{g.longestNotesStareSec}s</span>
-          <span>Notes stares &gt; 5 s</span><span>{g.notesStares.length}</span>
+          <span>On audience</span><span>{g.audiencePct}%</span>
+          <span>Spread across room</span><span>{Math.round(g.balanceEntropy * 100)}%</span>
+          <span>Longest notes look</span><span>{g.longestNotesStareSec}s</span>
+          <span>Notes looks &gt; 5 s</span><span>{g.notesStares.length}</span>
           <span>Face visible</span><span>{Math.round(g.faceVisibleFrac * 100)}%</span>
         </div>
       </div>
@@ -283,7 +309,7 @@ function TranscriptTab({ bundle, now, onSeek }: { bundle: SessionBundle; now: nu
       <div className="row" style={{ marginBottom: 10 }}>
         <h3>Transcript</h3>
         <span className="spacer" />
-        <span className="muted small">Fillers highlighted · click any word to play from there</span>
+        <span className="muted small">Fillers in red · click a word to play</span>
       </div>
       <div className="transcript">
         {words.map((w, i) => (
@@ -328,11 +354,8 @@ function QATab({ sid, questions, files }: { sid: string; questions: Question[]; 
   const KIND: Record<string, string> = { statistic: "Evidence", proposal: "Risk", causal: "Cause & effect", claim: "Support", comparison: "Comparison", under_explained: "Depth", definition: "Clarity", general: "General" };
   return (
     <div className="card">
-      <h3 style={{ marginBottom: 6 }}>Follow-up questions a judge might ask</h3>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Generated from your own transcript with keyphrase extraction and rule templates. No AI chatbot, no internet.
-        Play each one and answer out loud.
-      </p>
+      <h3 style={{ marginBottom: 6 }}>Judge questions</h3>
+      <p className="muted small" style={{ marginTop: 0 }}>Built from your transcript. Play one, answer out loud.</p>
       <div className="qa">
         {questions.map((q, i) => (
           <div className="card q" key={i} style={{ background: "var(--panel-2)" }}>
