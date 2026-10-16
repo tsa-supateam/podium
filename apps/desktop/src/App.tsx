@@ -11,10 +11,16 @@ import Analyzing from "./features/live/Analyzing";
 import Debrief from "./features/debrief/Debrief";
 import { stopSession } from "./features/live/session";
 
-export async function openSession(sessionId: string): Promise<boolean> {
+/** Open a session's debrief. A session that was recorded but never analyzed gets analyzed now
+ *  (unless `analyzeIfMissing` is false, as for the analyzing screen's own polling). */
+export async function openSession(sessionId: string, analyzeIfMissing = true): Promise<boolean> {
   const st = useApp.getState();
   try {
     const bundle = await engine.request<SessionBundle>("session.get", { sessionId });
+    if (!bundle.summary && analyzeIfMissing && bundle.session?.status !== "analyzing") {
+      await engine.request("session.analyze", { sessionId });
+      st.set({ analysis: { stage: "transcribe", pct: 0, sessionId }, analysisError: null });
+    }
     st.set({ bundle, sessionId, screen: bundle.summary ? "debrief" : "analyzing" });
     return !!bundle.summary;
   } catch (e) {

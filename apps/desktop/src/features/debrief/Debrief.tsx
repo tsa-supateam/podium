@@ -3,6 +3,7 @@ import { engine } from "../../lib/engine";
 import type { Question, SessionBundle, Summary } from "../../lib/types";
 import { useApp } from "../../stores/app";
 import { startSession } from "../live/session";
+import { METRICS, clusteringWord, speedChangeWord, steadinessWord, verdict, voiceWord } from "../../lib/metrics";
 import { GazeHeatmap, ScoreRing, Timeline, ZoneBars, scoreColor } from "./charts";
 
 type Tab = "overview" | "timeline" | "gaze" | "transcript" | "qa";
@@ -71,14 +72,6 @@ export default function Debrief() {
     }
   };
 
-  const sub: [string, number | null, string][] = [
-    ["Pacing", s.scores.pacing, `${Math.round(s.pacing.meanWpm)} WPM avg`],
-    ["Fillers", s.scores.fillers, `${s.fillers.perMinute.toFixed(1)} / min`],
-    ["Vocal variety", s.scores.vocalVariety, `${s.voice.f0StdSt.toFixed(1)} st spread`],
-    ["Eye contact", s.scores.eyeContact, s.gaze ? `${Math.round(s.gaze.audiencePct)}% audience` : "no camera"],
-    ["Structure", s.scores.structure, `${s.structure.transitions.length} signposts`],
-  ];
-
   return (
     <div className="page">
       <div className="row" style={{ marginBottom: 14 }}>
@@ -106,13 +99,29 @@ export default function Debrief() {
         <ScoreRing score={s.scores.overall} grade={s.scores.grade} />
         <div className="grid" style={{ gap: 14 }}>
           <div className="subscores">
-            {sub.map(([name, v, note]) => (
-              <div className="subscore" key={name}>
-                <span className="muted small">{name}</span>
-                <b style={{ color: v == null ? "var(--faint)" : scoreColor(v) }}>{v ?? "–"}</b>
-                <span className="muted small">{note}</span>
-              </div>
-            ))}
+            {METRICS.map((m) => {
+              const v = s.scores[m.key];
+              return (
+                <div className="subscore" key={m.key}>
+                  <span className="subscore-title">{m.title}</span>
+                  <div className="row" style={{ gap: 6, alignItems: "baseline" }}>
+                    <b style={{ color: v == null ? "var(--faint)" : scoreColor(v) }}>{v ?? "–"}</b>
+                    {v != null && <span className="muted small">/ 100</span>}
+                    <span className="verdict" style={{ color: v == null ? "var(--faint)" : scoreColor(v) }}>{verdict(v)}</span>
+                  </div>
+                  <span className="small">{m.measured(s)}</span>
+                  <span className="muted small">{m.what}</span>
+                  <details className="how">
+                    <summary>How is this scored?</summary>
+                    <ul>
+                      {m.how.map((h) => (
+                        <li key={h}>{h}</li>
+                      ))}
+                    </ul>
+                  </details>
+                </div>
+              );
+            })}
           </div>
           <div className="card row" style={{ alignItems: "flex-start" }}>
             <button className="btn primary" onClick={playVoice} disabled={!voiceUrl} style={{ whiteSpace: "nowrap" }}>
@@ -149,7 +158,7 @@ export default function Debrief() {
         <div className="grid" style={{ alignContent: "start" }}>
           <div className="card flush">
             {mediaUrl?.kind === "video" ? (
-              <video ref={mediaRef} className="media" src={mediaUrl.url} controls onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} style={{ transform: "scaleX(-1)" }} />
+              <video ref={mediaRef} className="media" src={mediaUrl.url} controls onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
             ) : mediaUrl ? (
               <div style={{ padding: 14 }}>
                 <audio ref={mediaRef} src={mediaUrl.url} controls style={{ width: "100%" }} onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
@@ -189,24 +198,35 @@ function Overview({ s, onSeek }: { s: Summary; onSeek: (t: number) => void }) {
       </div>
       <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <div className="card">
-          <h3 style={{ marginBottom: 10 }}>Pacing</h3>
+          <h3 style={{ marginBottom: 10 }}>Speaking speed</h3>
           <div className="kv">
-            <span>Average / median</span><span>{s.pacing.meanWpm} / {s.pacing.medianWpm} WPM</span>
-            <span>Articulation rate</span><span>{s.pacing.articulationRate} WPM</span>
-            <span>Variation (CV)</span><span>{s.pacing.cv}</span>
-            <span>Jitter (nPVI)</span><span>{s.pacing.npvi}</span>
-            <span>Pause ratio</span><span>{Math.round(s.pacing.pauseRatio * 100)}%</span>
-            <span>Long pauses (&gt;2 s)</span><span>{s.pacing.longPauses.length}</span>
+            <span title="Words per minute across the whole talk, including pauses">Average speed</span>
+            <span>{Math.round(s.pacing.meanWpm)} words/min</span>
+            <span title="Speed counting only the time you were actually talking">Speed while talking</span>
+            <span>{Math.round(s.pacing.articulationRate)} words/min</span>
+            <span title="Slowing down for key points is good; huge swings are not">Speed changes</span>
+            <span>{speedChangeWord(s.pacing.cv)}</span>
+            <span title="Whether you kept a steady rhythm or sped up and stalled">Rhythm</span>
+            <span>{steadinessWord(s.pacing.npvi)}</span>
+            <span>Time spent pausing</span>
+            <span>{Math.round(s.pacing.pauseRatio * 100)}%</span>
+            <span>Pauses longer than 2 seconds</span>
+            <span>{s.pacing.longPauses.length}</span>
           </div>
+          <p className="muted small" style={{ marginBottom: 0 }}>Target: 130–170 words per minute.</p>
         </div>
         <div className="card">
-          <h3 style={{ marginBottom: 10 }}>Fillers &amp; voice</h3>
+          <h3 style={{ marginBottom: 10 }}>Filler words &amp; voice</h3>
           <div className="kv">
-            {Object.entries(s.fillers.byToken).flatMap(([k, v]) => [<span key={`${k}-k`}>“{k}”</span>, <span key={`${k}-v`}>{v}</span>])}
-            <span>Burstiness</span><span>{s.fillers.burstiness}</span>
-            <span>Median pitch</span><span>{s.voice.f0MedianHz} Hz</span>
-            <span>Pitch spread</span><span>{s.voice.f0StdSt} st</span>
-            <span>Loudness spread</span><span>{s.voice.rmsDbStd} dB</span>
+            {Object.entries(s.fillers.byToken).flatMap(([k, v]) => [<span key={`${k}-k`}>“{k}”</span>, <span key={`${k}-v`}>{v}×</span>])}
+            <span>Filler pattern</span>
+            <span>{clusteringWord(s.fillers.burstiness, s.fillers.total)}</span>
+            <span title="How much your pitch rose and fell">Voice pitch</span>
+            <span>{voiceWord(s.voice.f0StdSt)}</span>
+            <span title="How much your volume changed for emphasis">Volume changes</span>
+            <span>{s.voice.rmsDbStd >= 4 ? "Good emphasis" : s.voice.rmsDbStd >= 2 ? "Some emphasis" : "Mostly the same volume"}</span>
+            <span title="The middle of your natural speaking pitch">Typical pitch</span>
+            <span>{Math.round(s.voice.f0MedianHz)} Hz</span>
           </div>
         </div>
       </div>
@@ -215,7 +235,7 @@ function Overview({ s, onSeek }: { s: Summary; onSeek: (t: number) => void }) {
 }
 
 function Moments({ s, onSeek }: { s: Summary; onSeek: (t: number) => void }) {
-  const label: Record<string, string> = { filler_cluster: "Filler burst", monotone: "Monotone stretch", rush: "Rushing", notes_stare: "Long look at notes" };
+  const label: Record<string, string> = { filler_cluster: "Several filler words close together", monotone: "Voice went flat", rush: "Talking too fast", notes_stare: "Long look at notes" };
   if (!s.highlights.length) return <p className="muted small">Nothing stood out. Nice and steady.</p>;
   return (
     <div className="grid" style={{ gap: 6 }}>

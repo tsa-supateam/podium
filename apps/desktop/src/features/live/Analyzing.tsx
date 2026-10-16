@@ -27,7 +27,7 @@ export default function Analyzing() {
     const start = Date.now();
     const id = setInterval(async () => {
       setWaited(Math.round((Date.now() - start) / 1000));
-      if (Date.now() - start > 4000 && (await openSession(sessionId))) clearInterval(id);
+      if (Date.now() - start > 4000 && (await openSession(sessionId, false))) clearInterval(id);
     }, 3000);
     return () => clearInterval(id);
   }, [sessionId, analysisError]);

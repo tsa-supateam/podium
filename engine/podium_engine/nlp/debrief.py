@@ -88,8 +88,9 @@ def _growth(s: dict, keyphrase_at) -> list[Item]:
                         f"word in each sentence.", m["t0"]))
     elif sc["vocalVariety"] < 60:
         out.append(Item("GROW_VOICE", "vocalVariety", 1 - sc["vocalVariety"] / 100,
-                        f"Your pitch varied by about {v.get('f0StdSt', 0):.1f} semitones. Adding more rise and fall "
-                        f"will make you sound more engaged."))
+                        ("Your voice stayed close to one note for much of the talk. " if v.get("f0StdSt", 0) < 2.5 else
+                         "Your voice jumped around a lot in pitch. ")
+                        + "Let it rise on important words and fall at the end of each point to sound more engaged."))
     g = s.get("gaze")
     if g and sc.get("eyeContact") is not None and sc["eyeContact"] < 70:
         if g["zonePct"]["N"] > 25:

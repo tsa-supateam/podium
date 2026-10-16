@@ -68,14 +68,14 @@ export default function Live() {
           </div>
         </div>
         <div className="stat">
-          <div className="label">Pace (WPM)</div>
+          <div className="label">Speed (words/min)</div>
           <div className="value" style={{ color: PACE_COLORS[pace?.label ?? "pause"] }}>
             {pace && pace.label !== "pause" ? Math.round(pace.wpmEma) : "–"}
           </div>
           <div className="sub">{pace ? (pace.label === "pause" ? "pausing" : pace.label) : "target 130–170"}</div>
         </div>
         <div className="stat">
-          <div className="label">Fillers</div>
+          <div className="label">Filler words</div>
           <div className="value" style={{ color: perMin != null && perMin > 4 ? "var(--bad)" : undefined }}>{fillerCount}</div>
           <div className="sub">{perMin != null ? `${perMin.toFixed(1)} / min` : " "}</div>
         </div>
@@ -108,7 +108,8 @@ export default function Live() {
           <ZoneMap />
         </div>
         <div>
-          <h3 style={{ marginBottom: 8 }}>What the audience feels</h3>
+          <h3 style={{ marginBottom: 4 }}>What's losing the audience</h3>
+          <p className="muted small" style={{ margin: "0 0 8px" }}>Longer, redder bars hurt engagement more.</p>
           <Components />
         </div>
         <div>
@@ -168,12 +169,12 @@ function ZoneMap() {
 function Components() {
   const c = live.tick?.c;
   const rows: [string, number | null | undefined, string][] = [
-    ["Fillers", c?.filler, "filler-word density, last 30 s"],
-    ["Monotone", c?.monotony, "pitch + loudness variation, last 10 s"],
-    ["Gaze", c?.gaze, "audience eye contact, last 10 s"],
-    ["Pace", c?.pace, "distance from 150 WPM"],
+    ["Filler words", c?.filler, "How often you said um, uh, like… in the last 30 seconds"],
+    ["Flat voice", c?.monotony, "How little your pitch and volume changed in the last 10 seconds"],
+    ["Looking away", c?.gaze, "Time not looking at the audience in the last 10 seconds"],
+    ["Speed", c?.pace, "How far your speed is from a comfortable 150 words per minute"],
   ];
-  if (c?.silence != null) rows.push(["Silence", c.silence, "long pause"]);
+  if (c?.silence != null) rows.push(["Long silence", c.silence, "You've been quiet for a while"]);
   return (
     <div className="components">
       {rows.map(([name, v, tip]) => (

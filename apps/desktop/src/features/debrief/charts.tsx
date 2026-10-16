@@ -20,7 +20,7 @@ export function ScoreRing({ score, grade }: { score: number; grade: string }) {
       <div className="num">
         <div>
           <b>{score}</b>
-          <span className="muted">overall · {grade}</span>
+          <span className="muted">out of 100 · grade {grade}</span>
         </div>
       </div>
     </div>
@@ -98,7 +98,7 @@ export function Timeline({ s, current, onSeek }: TimelineProps) {
         style={{ cursor: "pointer" }}
       >
         {/* lane labels */}
-        {[["Engagement", lanes.eng], ["Pace (WPM)", lanes.pace], ["Pitch", lanes.pitch], ["Fillers", lanes.fill], ["Gaze", lanes.gaze]].map(
+        {[["Engagement", lanes.eng], ["Speed", lanes.pace], ["Voice pitch", lanes.pitch], ["Fillers", lanes.fill], ["Looking at", lanes.gaze]].map(
           ([label, [a, b]]: any) => (
             <text key={label} x={4} y={(a + b) / 2 + 4} fill="var(--muted)" fontSize="11">
               {label}
@@ -162,9 +162,9 @@ export function Timeline({ s, current, onSeek }: TimelineProps) {
         </div>
       )}
       <div className="legend" style={{ marginTop: 8 }}>
-        <span><i style={{ background: "#4fd18b10", border: "1px solid #4fd18b55" }} />130–170 WPM band</span>
-        <span><i style={{ background: "#ff6b6b18" }} />rushing</span>
-        <span><i style={{ background: "#f5b14c18" }} />monotone</span>
+        <span><i style={{ background: "#4fd18b10", border: "1px solid #4fd18b55" }} />ideal speed (130–170 words/min)</span>
+        <span><i style={{ background: "#ff6b6b18" }} />talking too fast</span>
+        <span><i style={{ background: "#f5b14c18" }} />voice went flat</span>
         <span><i style={{ background: "#ff6b6b" }} />um / uh</span>
         <span><i style={{ background: "#ff9f6b" }} />like / you know</span>
         {(["L", "C", "R", "N", "X"] as Zone[]).map((z) => (
