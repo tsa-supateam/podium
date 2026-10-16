@@ -95,7 +95,16 @@ export class EngineClient {
       }
       return;
     }
-    const ev = JSON.parse(data) as Envelope;
+    let ev: Envelope;
+    try {
+      ev = JSON.parse(data) as Envelope;
+    } catch (e) {
+      // Never let one malformed message leave a request hanging: fail every pending request loudly.
+      console.error("Malformed message from engine", e);
+      for (const p of this.pending.values()) p.reject(new Error("Engine sent a malformed message"));
+      this.pending.clear();
+      return;
+    }
     if (ev.id != null && this.pending.has(ev.id)) {
       const p = this.pending.get(ev.id)!;
       this.pending.delete(ev.id);
@@ -135,6 +144,11 @@ export class EngineClient {
     const url = URL.createObjectURL(new Blob([buf], { type: mime }));
     this.fileCache.set(key, url);
     return url;
+  }
+
+  /** Stream one 20 ms frame of 16 kHz float32 mic audio to the running session. */
+  sendAudio(sessionId: string, pcm: ArrayBuffer): void {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(packBinary({ type: "audio", sessionId }, pcm));
   }
 
   async uploadVideo(sessionId: string, blob: Blob): Promise<void> {

@@ -11,9 +11,16 @@ import Analyzing from "./features/live/Analyzing";
 import Debrief from "./features/debrief/Debrief";
 import { stopSession } from "./features/live/session";
 
-export async function openSession(sessionId: string): Promise<void> {
-  const bundle = await engine.request<SessionBundle>("session.get", { sessionId });
-  useApp.getState().set({ bundle, screen: bundle.summary ? "debrief" : "analyzing" });
+export async function openSession(sessionId: string): Promise<boolean> {
+  const st = useApp.getState();
+  try {
+    const bundle = await engine.request<SessionBundle>("session.get", { sessionId });
+    st.set({ bundle, sessionId, screen: bundle.summary ? "debrief" : "analyzing" });
+    return !!bundle.summary;
+  } catch (e) {
+    st.set({ toast: `Could not open the session: ${(e as Error).message}` });
+    return false;
+  }
 }
 
 export default function App() {
@@ -63,6 +70,9 @@ export default function App() {
           break;
         case "analysis.progress":
           set({ analysis: { stage: ev.data.stage, pct: ev.data.pct, sessionId: ev.data.sessionId } });
+          break;
+        case "audio.silent":
+          set({ toast: ev.data.message });
           break;
         case "analysis.done":
           set({ analysis: null });

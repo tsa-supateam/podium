@@ -68,11 +68,11 @@ export interface GazeSample {
 export interface Scores {
   overall: number;
   grade: string;
-  pacing: number;
-  fillers: number;
-  vocalVariety: number;
+  pacing: number | null;
+  fillers: number | null;
+  vocalVariety: number | null;
   eyeContact: number | null;
-  structure: number;
+  structure: number | null;
 }
 
 export interface Summary {
@@ -146,6 +146,7 @@ export interface Summary {
   debrief: { text: string; strengths: any[]; growth: { text: string; t: number | null; metric: string }[]; drill: string | null };
   debriefAudio?: string;
   analysisSec: number;
+  noSpeech?: boolean;
 }
 
 export interface Transcript {

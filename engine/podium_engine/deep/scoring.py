@@ -128,7 +128,7 @@ def overall(scores: dict[str, int | None]) -> tuple[int, str]:
     w = {"pacing": 0.20, "fillers": 0.20, "vocalVariety": 0.20, "eyeContact": 0.25, "structure": 0.15}
     num = sum(w[k] * v for k, v in scores.items() if k in w and v is not None)
     den = sum(w[k] for k, v in scores.items() if k in w and v is not None)
-    s = int(round(num / den)) if den else 0
+    s = round(num / den) if den else 0
     grade = next(g for cut, g in [(93, "A"), (90, "A-"), (87, "B+"), (83, "B"), (80, "B-"), (77, "C+"), (73, "C"),
                                   (70, "C-"), (60, "D"), (0, "F")] if s >= cut)
     return s, grade

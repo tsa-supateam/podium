@@ -93,6 +93,15 @@ export default function Debrief() {
         <button className="btn primary" onClick={() => go("setup")}>Practice again</button>
       </div>
 
+      {s.noSpeech && (
+        <div className="card" style={{ borderColor: "var(--bad)", marginBottom: 16 }}>
+          <b style={{ color: "var(--bad)" }}>No speech was detected in this run.</b>{" "}
+          <span className="muted">
+            Speech scores are skipped. Check the microphone meter on the setup screen and the microphone permission in
+            System Settings → Privacy &amp; Security → Microphone.
+          </span>
+        </div>
+      )}
       <div className="debrief-head">
         <ScoreRing score={s.scores.overall} grade={s.scores.grade} />
         <div className="grid" style={{ gap: 14 }}>

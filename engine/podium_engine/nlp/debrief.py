@@ -144,3 +144,17 @@ def build(summary: dict, keyphrase_at) -> dict:
         "growth": [i.__dict__ for i in picked],
         "drill": DRILLS[picked[0].metric] if picked else None,
     }
+
+
+def no_speech(summary: dict) -> dict:
+    """Debrief for a recording with no detectable speech (usually a muted or blocked microphone)."""
+    if summary["voice"].get("peakDb", 0.0) <= -90:
+        cause = ("The microphone recording was completely silent, which usually means the app does not have "
+                 "microphone permission or the wrong input is selected.")
+    else:
+        cause = "The recording had sound, but no words could be recognized. Try speaking closer to the microphone."
+    text = f"Podium did not hear any speech in this run. {cause} Check the microphone meter on the setup screen, then try again."
+    g = summary.get("gaze")
+    if g:
+        text += f" Your eye contact was still tracked: {round(g['audiencePct'])} percent of your time went to the audience."
+    return {"text": text, "strengths": [], "growth": [], "drill": None}

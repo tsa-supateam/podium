@@ -46,6 +46,7 @@ def extract(wav: Path, fmin: float = 65, fmax: float = 400, hop_s: float = 0.01)
     rms_db = 20 * np.log10(np.interp(t, rms_t, rms) + 1e-9)
 
     voice: dict = {
+        "peakDb": round(float(20 * np.log10(np.max(np.abs(y)) + 1e-9)), 1) if len(y) else -180.0,
         "f0MedianHz": round(med, 1),
         "f0RangeSt": round(float(np.nanpercentile(st, 95) - np.nanpercentile(st, 5)), 2) if voiced.sum() > 20 else 0.0,
         "f0StdSt": round(robust_std(st[voiced]), 2) if voiced.any() else 0.0,
@@ -58,8 +59,11 @@ def extract(wav: Path, fmin: float = 65, fmax: float = 400, hop_s: float = 0.01)
         voice["shimmerLocal"] = round(float(call([snd, pp], "Get shimmer (local)", 0, 0, 0.0001, 0.02, 1.3, 1.6)), 4)
         harm = call(snd, "To Harmonicity (cc)", 0.01, fmin, 0.1, 1.0)
         voice["hnrDb"] = round(float(call(harm, "Get mean", 0, 0)), 1)
-    except Exception:  # noqa: BLE001 - voice quality is optional
+    except Exception:  # voice quality is optional
         pass
+    for k in ("jitterLocal", "shimmerLocal", "hnrDb"):
+        if k in voice and not np.isfinite(voice[k]):
+            del voice[k]  # undefined on silent or unvoiced audio
     return ProsodyTrack(t, f0, st, rms_db), voice
 
 

@@ -13,7 +13,7 @@ export interface Settings {
   recordVideo: boolean;
   flipYaw: boolean;
   showCamera: boolean;
-  audioDevice: number | null;
+  audioDevice: string | null; // browser deviceId
 }
 
 interface AppState {

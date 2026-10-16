@@ -101,7 +101,7 @@ cd engine && uv run python -m podium_engine replay path/to/speech.wav
 ## Tests and measurements
 
 ```bash
-make test      # 38 Python tests (incl. end-to-end replay → analysis) + 15 TypeScript tests
+make test      # 41 Python tests (incl. end-to-end replay → analysis) + 15 TypeScript tests
 make bench     # real-time factor, filler latency, analysis time on this machine
 make smoke     # builds the app, launches it hidden, checks it connects to the engine
 ```

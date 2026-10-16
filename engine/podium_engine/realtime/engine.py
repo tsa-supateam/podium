@@ -65,6 +65,31 @@ class MicSource:
             return {"name": "default", "sampleRate": self.sr}
 
 
+class PushSource:
+    """Audio captured by the app window (getUserMedia) and streamed over the WebSocket.
+
+    The default for live sessions: the window already holds the OS microphone permission, while
+    a Python process launched by it may silently receive zeros on macOS.
+    """
+
+    def __init__(self, sr: int, name: str = "App microphone") -> None:
+        self.sr, self.name = sr, name
+        self._cb: Callable[[np.ndarray], None] | None = None
+
+    def start(self, on_audio: Callable[[np.ndarray], None]) -> None:
+        self._cb = on_audio
+
+    def push(self, samples: np.ndarray) -> None:
+        if self._cb is not None and len(samples):
+            self._cb(samples)
+
+    def stop(self) -> None:
+        self._cb = None
+
+    def describe(self) -> dict:
+        return {"name": self.name, "sampleRate": self.sr}
+
+
 class FileSource:
     """Replays a WAV (and optionally a recorded gaze track) at real-time speed: Replay Mode."""
 
@@ -170,6 +195,8 @@ class RealtimeEngine:
         self._wpm_ema: float | None = None
         self._next_tick = 0.0
         self._next_pace = 1.0
+        self._silent_since: float | None = 0.0
+        self._silence_warned = False
         self._hop_i = 0
 
         self._wav = wave.open(str(self.dir / "audio.wav"), "wb")
@@ -179,7 +206,7 @@ class RealtimeEngine:
 
         self._running = threading.Event()
         self._thread: threading.Thread | None = None
-        self._source: MicSource | FileSource | None = None
+        self._source: MicSource | FileSource | PushSource | None = None
         self._flush_at = time.monotonic()
 
     # -- lifecycle --------------------------------------------------------
@@ -187,7 +214,7 @@ class RealtimeEngine:
     def t(self) -> float:
         return self.ring.written / self.sr
 
-    def start(self, source: MicSource | FileSource) -> None:
+    def start(self, source: MicSource | FileSource | PushSource) -> None:
         self._source = source
         self.meta.setdefault("devices", {})["audioInput"] = source.describe()
         self.meta["status"] = "recording"
@@ -401,7 +428,21 @@ class RealtimeEngine:
         self.tel.write("pace", rec)
         self.emit({"type": "pace.tick", "t": rec["t"], "data": rec})
 
+    def _check_input(self, t: float) -> None:
+        """Warn once if the input is digital silence: a denied OS permission delivers exact zeros."""
+        level = self.prosody[-1][2] if self.prosody else -180.0
+        if level > -100:
+            self._silent_since = None
+        elif self._silent_since is None:
+            self._silent_since = t
+        elif not self._silence_warned and t - self._silent_since >= 3.0:
+            self._silence_warned = True
+            self.emit({"type": "audio.silent", "t": round(t, 3),
+                       "data": {"message": "The microphone is sending pure silence. Check the input device and "
+                                           "microphone permission for Podium."}})
+
     def _fusion_tick(self, t: float) -> None:
+        self._check_input(t)
         b = self.cfg["boredom"]
         silence = t - self._last_speech_t
         recent_g = [(t_, z) for (t_, z) in self.gaze if t_ > t - b["gaze_window_s"]]

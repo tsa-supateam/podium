@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import secrets
 import shutil
 import sqlite3
@@ -23,9 +24,25 @@ def new_session_id() -> str:
     return f"{now}_{secrets.token_hex(2)}"
 
 
+def json_safe(obj: Any) -> Any:
+    """Replace NaN/Infinity with None. Python's json emits bare NaN, which JSON.parse rejects
+    (silent audio makes jitter/shimmer NaN, which once left the debrief screen hanging)."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [json_safe(v) for v in obj]
+    return obj
+
+
+def dumps(obj: Any, **kw: Any) -> str:
+    return json.dumps(json_safe(obj), allow_nan=False, **kw)
+
+
 def write_json(path: Path, obj: Any) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(obj, indent=2))
+    tmp.write_text(dumps(obj, indent=2))
     tmp.replace(path)
 
 
@@ -54,7 +71,7 @@ class TelemetryWriter:
 
     def write(self, channel: str, record: dict) -> None:
         with self._lock:
-            self._buf[channel].append(json.dumps(record, separators=(",", ":")))
+            self._buf[channel].append(dumps(record, separators=(",", ":")))
 
     def flush(self) -> None:
         with self._lock:

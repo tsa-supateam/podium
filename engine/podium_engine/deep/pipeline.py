@@ -158,6 +158,10 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
         "eyeContact": scoring.score_eye(gaze),
         "structure": struct["score"],
     }
+    no_speech = n_words < 5
+    if no_speech:
+        # Nothing was said (or the mic delivered silence): speech scores would be meaningless.
+        scores.update(pacing=None, fillers=None, vocalVariety=None, structure=None)
     scores["overall"], scores["grade"] = scoring.overall(scores)
 
     highlights = (
@@ -175,7 +179,8 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
     }
 
     # 9. debrief script + TTS
-    deb = debrief.build(summary, keyphrase_at)
+    summary["noSpeech"] = no_speech
+    deb = debrief.no_speech(summary) if no_speech else debrief.build(summary, keyphrase_at)
     summary["debrief"] = deb
     (session_dir / "debrief.txt").write_text(deb["text"] + "\n")
     progress("tts", 0.0)

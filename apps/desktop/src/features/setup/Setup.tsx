@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cameraStream, startCamera, tracker } from "../../lib/camera";
-import { engine } from "../../lib/engine";
+import { listMics, micLevelDb, startMic } from "../../lib/mic";
 import { ZONE_NAMES } from "../../lib/types";
 import { live, useApp, useTicker } from "../../stores/app";
 import { startSession } from "../live/session";
@@ -9,7 +9,9 @@ export default function Setup() {
   const { settings, setSettings, go, calibrated, set } = useApp();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [camErr, setCamErr] = useState<string | null>(null);
-  const [devices, setDevices] = useState<{ index: number; name: string; default: boolean }[]>([]);
+  const [devices, setDevices] = useState<{ deviceId: string; label: string }[]>([]);
+  const [micErr, setMicErr] = useState<string | null>(null);
+  const deviceId = typeof settings.audioDevice === "string" ? settings.audioDevice : null;
   const [starting, setStarting] = useState(false);
   useTicker(8);
 
@@ -19,8 +21,21 @@ export default function Setup() {
         if (videoRef.current) videoRef.current.srcObject = s;
       })
       .catch((e) => setCamErr(e.message ?? String(e)));
-    engine.request("devices.list").then(setDevices).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setMicErr(null);
+    startMic(deviceId)
+      .then(() => listMics().then(setDevices))
+      .catch((e) => setMicErr(e.message ?? String(e)));
+  }, [deviceId]);
+
+  // Track how long the mic has been at digital silence (a denied permission delivers exact zeros).
+  const level = micLevelDb();
+  const silentSince = useRef<number | null>(null);
+  if (level > -95) silentSince.current = null;
+  else if (silentSince.current == null) silentSince.current = performance.now();
+  const micDead = silentSince.current != null && performance.now() - silentSince.current > 3000;
 
   const g = live.gaze;
   const faceOk = !!g?.face;
@@ -106,17 +121,26 @@ export default function Setup() {
             <div className="field">
               <label>Microphone</label>
               <select
-                value={settings.audioDevice ?? ""}
-                onChange={(e) => setSettings({ audioDevice: e.target.value === "" ? null : Number(e.target.value) })}
+                value={deviceId ?? ""}
+                onChange={(e) => setSettings({ audioDevice: e.target.value === "" ? null : e.target.value })}
               >
                 <option value="">System default</option>
-                {devices.map((d) => (
-                  <option key={d.index} value={d.index}>
-                    {d.name}
-                    {d.default ? " (default)" : ""}
+                {devices.filter((d) => d.deviceId !== "default").map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label}
                   </option>
                 ))}
               </select>
+              <div className="meter" title={`${level.toFixed(0)} dBFS`}>
+                <div style={{ width: `${Math.max(0, Math.min(100, (level + 70) * 1.6))}%` }} />
+              </div>
+              {micErr && <span className="small" style={{ color: "var(--bad)" }}>Microphone unavailable: {micErr}</span>}
+              {!micErr && micDead && (
+                <span className="small" style={{ color: "var(--bad)" }}>
+                  No sound from this microphone. Pick another input, or check System Settings → Privacy &amp;
+                  Security → Microphone.
+                </span>
+              )}
             </div>
             <label className="check">
               <input type="checkbox" checked={settings.recordVideo} onChange={(e) => setSettings({ recordVideo: e.target.checked })} />
@@ -129,6 +153,7 @@ export default function Setup() {
             <ul className="checklist">
               <Check ok={camOk} label="Camera on" />
               <Check ok={faceOk} label="Face visible and well lit" />
+              <Check ok={!micErr && !micDead && level > -95} label="Microphone picking up sound (say something)" />
               <Check ok={calibrated} label="Gaze calibrated for this room (recommended)" />
             </ul>
           </div>

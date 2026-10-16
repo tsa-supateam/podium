@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { openSession } from "../../App";
 import { useApp } from "../../stores/app";
 
 const STAGES: [string, string][] = [
@@ -13,9 +15,23 @@ const STAGES: [string, string][] = [
 ];
 
 export default function Analyzing() {
-  const { analysis, analysisError, go } = useApp();
-  const idx = analysis ? STAGES.findIndex(([k]) => k === analysis.stage) : 0;
-  const overall = analysis ? Math.min(1, (Math.max(idx, 0) + (analysis.pct ?? 0)) / STAGES.length) : 0;
+  const { analysis, analysisError, go, sessionId } = useApp();
+  const [waited, setWaited] = useState(0);
+  const done = analysis?.stage === "done";
+  const idx = !analysis ? 0 : done ? STAGES.length : Math.max(0, STAGES.findIndex(([k]) => k === analysis.stage));
+  const overall = analysis ? Math.min(1, (idx + (done ? 0 : analysis.pct ?? 0)) / STAGES.length) : 0;
+
+  // Safety net: if the "done" event is missed for any reason, check the session folder directly.
+  useEffect(() => {
+    if (!sessionId || analysisError) return;
+    const start = Date.now();
+    const id = setInterval(async () => {
+      setWaited(Math.round((Date.now() - start) / 1000));
+      if (Date.now() - start > 4000 && (await openSession(sessionId))) clearInterval(id);
+    }, 3000);
+    return () => clearInterval(id);
+  }, [sessionId, analysisError]);
+
   return (
     <div className="center-card" style={{ maxWidth: 480 }}>
       {analysisError ? (
@@ -39,6 +55,12 @@ export default function Analyzing() {
             ))}
           </ul>
           <p className="muted small">The deep-analysis engine runs in its own process so it never slows down live feedback.</p>
+          {waited > 90 && (
+            <div className="row">
+              <span className="muted small">This is taking longer than usual.</span>
+              <button className="btn ghost" onClick={() => go("history")}>Go to history</button>
+            </div>
+          )}
         </>
       )}
     </div>

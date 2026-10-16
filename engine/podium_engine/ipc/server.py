@@ -19,13 +19,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+import numpy as np
 import websockets
 from websockets.asyncio.server import ServerConnection, serve
 
 from .. import config as cfgmod
 from .. import storage
 from ..paths import models_dir, sessions_dir
-from ..realtime.engine import FileSource, MicSource, RealtimeEngine, load_replay_gaze, new_meta
+from ..realtime.engine import FileSource, MicSource, PushSource, RealtimeEngine, load_replay_gaze, new_meta
 
 log = logging.getLogger("podium.ipc")
 PROTOCOL_VERSION = 1
@@ -49,7 +50,7 @@ class Server:
         self.cfg = cfgmod.load()
         self.client: ServerConnection | None = None
         self.engine: RealtimeEngine | None = None
-        self.source: MicSource | FileSource | None = None
+        self.source: MicSource | FileSource | PushSource | None = None
         self.session_id: str | None = None
         self.replay = False
         self.queue: asyncio.Queue[dict] = asyncio.Queue()
@@ -65,7 +66,7 @@ class Server:
         ev.setdefault("v", PROTOCOL_VERSION)
         if self.client is not None:
             try:
-                await self.client.send(json.dumps(ev, separators=(",", ":")))
+                await self.client.send(storage.dumps(ev, separators=(",", ":")))
             except websockets.ConnectionClosed:
                 pass
 
@@ -191,7 +192,10 @@ class Server:
             self.source = FileSource(wav, a["sample_rate"], block, float(d.get("speed", 1.0)), gaze, on_gaze)
             self.replay = True
             asyncio.get_running_loop().run_in_executor(None, self._watch_replay_end, self.source, sid)
-        else:
+        elif d.get("audioSource", "app") == "app":
+            self.source = PushSource(a["sample_rate"], d.get("audioDeviceName") or "App microphone")
+            self.replay = False
+        else:  # "engine": capture with PortAudio inside this process
             self.source = MicSource(a["sample_rate"], block, d.get("audioDevice"))
             self.replay = False
         self.session_id = sid
@@ -228,14 +232,16 @@ class Server:
             sys.executable, "-m", "podium_engine", "analyze", str(sdir), "--json-progress",
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         self.analyses[sid] = proc
-        assert proc.stdout is not None
+        assert proc.stdout is not None and proc.stderr is not None
+        # Drain stderr concurrently: if its pipe buffer fills, the child blocks and stdout never ends.
+        err_task = asyncio.create_task(proc.stderr.read())
         async for line in proc.stdout:
             try:
                 msg = json.loads(line)
             except json.JSONDecodeError:
                 continue
             await self.send({"type": "analysis.progress", "data": {"sessionId": sid, **msg}})
-        err = (await proc.stderr.read()).decode(errors="ignore") if proc.stderr else ""
+        err = (await err_task).decode(errors="ignore")
         code = await proc.wait()
         self.analyses.pop(sid, None)
         if code == 0:
@@ -248,7 +254,8 @@ class Server:
         out: dict[str, Any] = {"sessionId": sid}
         for name in ("session", "summary", "transcript", "questions", "calibration"):
             f = p / f"{name}.json"
-            out[name] = json.loads(f.read_text()) if f.exists() else None
+            # parse_constant: sessions saved before the NaN fix may contain bare NaN
+            out[name] = json.loads(f.read_text(), parse_constant=lambda _: None) if f.exists() else None
         out["files"] = sorted(x.name for x in p.iterdir() if x.name in SERVED_FILES)
         return out
 
@@ -263,6 +270,11 @@ class Server:
         await self.client.send(pack_binary({"type": "file", "id": ev.get("id"), "name": name}, data))
 
     async def on_binary(self, header: dict, payload: bytes) -> None:
+        if header.get("type") == "audio":
+            # 16 kHz mono float32 PCM from the app window's AudioWorklet
+            if isinstance(self.source, PushSource) and header.get("sessionId") == self.session_id:
+                self.source.push(np.frombuffer(payload, dtype="<f4").copy())
+            return
         if header.get("type") == "video.upload":
             p = storage.session_path(header["sessionId"])
             if not p.exists():
