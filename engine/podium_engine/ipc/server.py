@@ -155,6 +155,14 @@ class Server:
             storage.write_json(p, meta)
             storage.Index().upsert(meta)
             await self.reply(ev, "ok", {})
+        elif t == "questions.quick":
+            from ..nlp.quick import quick_questions
+
+            qs = await asyncio.get_running_loop().run_in_executor(
+                None, quick_questions, storage.session_path(d["sessionId"]), int(d.get("k", 5)))
+            await self.reply(ev, "questions", qs)
+        elif t == "tts.speak":
+            await self.speak(ev, str(d["text"])[:500])
         elif t == "file.get":
             await self.send_file(ev, d["sessionId"], d["name"])
         else:
@@ -170,7 +178,11 @@ class Server:
         title = d.get("title") or "Practice run"
         replay_from = d.get("replaySessionId")
         mode = "replay" if replay_from else d.get("mode", "practice")
+        if mode == "qa":  # an on-the-spot answer to a question about a previous speech
+            extra.update(parentSessionId=d["parentSessionId"], question=d.get("question", ""))
         meta = new_meta(sid, title, mode, self.cfg, extra)
+        if mode == "qa":
+            self._link_answer(d["parentSessionId"], sid, d.get("question", ""))
         if d.get("calibration"):
             sdir.mkdir(parents=True, exist_ok=True)
             storage.write_json(sdir / "calibration.json", d["calibration"])
@@ -252,6 +264,27 @@ class Server:
         else:
             await self.send({"type": "analysis.failed", "data": {"sessionId": sid, "message": err[-800:]}})
 
+    def _link_answer(self, parent: str, child: str, question: str) -> None:
+        pf = storage.session_path(parent) / "session.json"
+        pm = json.loads(pf.read_text())
+        pm.setdefault("answers", []).append({"sessionId": child, "question": question})
+        storage.write_json(pf, pm)
+
+    async def speak(self, ev: dict, text: str) -> None:
+        """Synthesize short text with Piper (cached by content) and return the WAV as a binary frame."""
+        import hashlib
+
+        from .. import tts
+        from ..paths import data_dir
+
+        cache = data_dir() / "tts_cache"
+        cache.mkdir(exist_ok=True)
+        f = cache / (hashlib.sha1(text.encode()).hexdigest()[:16] + ".wav")
+        if not f.exists():
+            await asyncio.get_running_loop().run_in_executor(None, tts.synthesize, text, f)
+        assert self.client is not None
+        await self.client.send(pack_binary({"type": "file", "id": ev.get("id"), "name": f.name}, f.read_bytes()))
+
     def load_session(self, sid: str) -> dict:
         p = storage.session_path(sid)
         out: dict[str, Any] = {"sessionId": sid}
@@ -260,7 +293,16 @@ class Server:
             # parse_constant: sessions saved before the NaN fix may contain bare NaN
             out[name] = json.loads(f.read_text(), parse_constant=lambda _: None) if f.exists() else None
         out["files"] = sorted(x.name for x in p.iterdir() if x.name in SERVED_FILES)
+        out["answers"] = [self._answer_bundle(a) for a in (out["session"] or {}).get("answers", [])]
         return out
+
+    def _answer_bundle(self, a: dict) -> dict:
+        p = storage.session_path(a["sessionId"])
+        read = lambda n: json.loads((p / n).read_text(), parse_constant=lambda _: None) if (p / n).exists() else None  # noqa: E731
+        summary, transcript = read("summary.json"), read("transcript.json")
+        files = sorted(x.name for x in p.iterdir() if x.name in SERVED_FILES) if p.exists() else []
+        return {"sessionId": a["sessionId"], "question": a.get("question", ""), "summary": summary,
+                "text": (transcript or {}).get("text", ""), "files": files}
 
     async def send_file(self, ev: dict, sid: str, name: str) -> None:
         if name not in SERVED_FILES:

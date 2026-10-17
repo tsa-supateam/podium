@@ -20,8 +20,8 @@ export default function Home() {
           <h1>Practice in front of an audience that reacts to you.</h1>
           <p>
             Podium listens to your pace, filler words and vocal variety, and watches where you look. A virtual
-            audience leans in or loses interest in real time. Afterwards you get a full debrief, spoken aloud, plus
-            the follow-up questions a judge might ask.
+            audience leans in or loses interest in real time. Afterwards you answer a judge-style question or two on
+            the spot, then get a full debrief, spoken aloud.
           </p>
           <div className="row">
             <button className="btn primary big" onClick={() => go("setup")}>
@@ -50,7 +50,7 @@ export default function Home() {
           ["Live pacing", "Words per minute over rolling 5-second windows, with an optimal band."],
           ["Filler detection", "Catches um, uh, like and you know as you speak."],
           ["Eye-contact zones", "Left, center, right audience and your notes, tracked from your webcam."],
-          ["Spoken debrief", "Scores, a timeline of key moments, and practice questions read aloud."],
+          ["Q&A round", "Answer questions about your own speech on the spot, then get a spoken debrief."],
         ].map(([t, d]) => (
           <div className="card feature" key={t}>
             <b>{t}</b>

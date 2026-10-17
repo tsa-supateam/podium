@@ -70,7 +70,7 @@ def _clause_np(clause: str) -> str | None:
     return nps[-1] if nps else None
 
 
-def _sentence_candidates(s: Sentence, keyphrases: list[dict]) -> list[Candidate]:
+def _sentence_candidates(s: Sentence, keyphrases: list[dict], punctuated: bool = True) -> list[Candidate]:
     text = strip_fillers(s.text)
     if len(text.split()) < 5:
         return []
@@ -82,7 +82,8 @@ def _sentence_candidates(s: Sentence, keyphrases: list[dict]) -> list[Candidate]
         out.append(Candidate(kind, q, round(s.t0, 2), 0.6 * kw + 0.4 * PRIOR[kind], text))
 
     if m := STAT.search(text):
-        fig = re.sub(r"\s+%", "%", m.group(0).replace(" percent", "%")).strip()
+        # "90 percent" -> "90%", but keep spelled-out numbers ("ninety percent") as words
+        fig = re.sub(r"(\d)\s*(percent|%)", r"\1%", m.group(0)).strip()
         subject = np_ or "that"
         add("statistic", f"Where does the figure \"{fig}\" for {the(subject) if np_ else subject} come from, and how recent is that data?")
     if PROPOSAL.search(text) and np_:
@@ -91,7 +92,10 @@ def _sentence_candidates(s: Sentence, keyphrases: list[dict]) -> list[Candidate]
         before, after = text[: m.start()], text[m.end() :]
         cause = _clause_np(after) if m.group(0).lower() in {"because", "due to"} else _clause_np(before)
         effect = _clause_np(before) if m.group(0).lower() in {"because", "due to"} else _clause_np(after)
-        if cause and effect and cause != effect:
+        # Only name both sides when they are real topics of the talk; on unpunctuated live
+        # transcripts the clause split is unreliable and produces nonsense pairs.
+        topical = lambda np_: any(k["phrase"] in np_ or np_ in k["phrase"] for k in keyphrases)  # noqa: E731
+        if punctuated and cause and effect and cause != effect and topical(cause) and topical(effect):
             add("causal", f"Could anything other than {the(cause)} explain {the(effect)}?")
         else:
             add("causal", f"How confident are you in the cause-and-effect link you described for {the(np_)}?")
@@ -125,10 +129,11 @@ def _mmr(cands: list[Candidate], k: int, lam: float = 0.7) -> list[Candidate]:
     return [cands[i] for i in chosen]
 
 
-def generate(sents: list[Sentence], keyphrases: list[dict], k: int = 6) -> list[dict]:
+def generate(sents: list[Sentence], keyphrases: list[dict], k: int = 6, punctuated: bool = True) -> list[dict]:
+    """`punctuated=False` for live (Vosk) transcripts: clause-level templates fall back to safe wording."""
     cands: list[Candidate] = []
     for s in sents:
-        cands.extend(_sentence_candidates(s, keyphrases))
+        cands.extend(_sentence_candidates(s, keyphrases, punctuated))
     full = " ".join(strip_fillers(s.text) for s in sents).lower()
     for kp in keyphrases[:8]:
         p = kp["phrase"]

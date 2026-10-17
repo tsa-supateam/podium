@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { engine } from "../../lib/engine";
-import type { DebriefItem, Question, SessionBundle, Summary } from "../../lib/types";
+import type { AnswerBundle, DebriefItem, SessionBundle, Summary } from "../../lib/types";
 import { useApp } from "../../stores/app";
 import { startSession } from "../live/session";
 import { METRICS, clusteringWord, firstSentence, speedChangeWord, steadinessWord, strengthLine, stripDrillLabel, voiceWord } from "../../lib/metrics";
 import { GazeHeatmap, ScoreRing, Timeline, ZoneBars, scoreColor } from "./charts";
 
-type Tab = "overview" | "timeline" | "gaze" | "transcript" | "qa";
+type Tab = "overview" | "timeline" | "gaze" | "transcript";
 const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 
 export default function Debrief() {
@@ -77,7 +77,6 @@ export default function Debrief() {
     ["gaze", "Eye contact"],
     ["timeline", "Timeline"],
     ["transcript", "Transcript"],
-    ["qa", "Q&A practice"],
   ];
 
   return (
@@ -131,6 +130,8 @@ export default function Debrief() {
       <FixNext s={s} onSeek={seek} onPlay={playVoice} speaking={speaking} canPlay={!!voiceUrl} />
       {voiceUrl && <audio ref={voiceRef} src={voiceUrl} onEnded={() => setSpeaking(false)} />}
 
+      {(bundle.answers?.length ?? 0) > 0 && <Answers answers={bundle.answers!} />}
+
       <div className="tabs">
         {tabs.map(([k, label]) => (
           <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>
@@ -148,7 +149,6 @@ export default function Debrief() {
           </div>
         )}
         {tab === "transcript" && <TranscriptTab bundle={bundle} now={now} onSeek={seek} />}
-        {tab === "qa" && <QATab sid={sid!} questions={bundle.questions?.questions ?? []} files={bundle.files} />}
       </div>
 
       <DetailedStats s={s} />
@@ -351,39 +351,59 @@ function TranscriptTab({ bundle, now, onSeek }: { bundle: SessionBundle; now: nu
   );
 }
 
-function QATab({ sid, questions, files }: { sid: string; questions: Question[]; files: string[] }) {
-  const [playing, setPlaying] = useState<number | null>(null);
+
+function Answers({ answers }: { answers: AnswerBundle[] }) {
+  const [playing, setPlaying] = useState<string | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
-  const play = async (i: number) => {
+  const play = async (a: AnswerBundle) => {
     audio.current?.pause();
-    if (playing === i) return setPlaying(null);
-    const name = `question_${i}.wav`;
-    if (!files.includes(name)) return;
-    const url = await engine.fileUrl(sid, name, "audio/wav");
-    audio.current = new Audio(url);
+    if (playing === a.sessionId) return setPlaying(null);
+    const name = a.files.includes("audio.wav") ? "audio.wav" : null;
+    if (!name) return;
+    audio.current = new Audio(await engine.fileUrl(a.sessionId, name, "audio/wav"));
     audio.current.onended = () => setPlaying(null);
     void audio.current.play();
-    setPlaying(i);
+    setPlaying(a.sessionId);
   };
-  const KIND: Record<string, string> = { statistic: "Evidence", proposal: "Risk", causal: "Cause & effect", claim: "Support", comparison: "Comparison", under_explained: "Depth", definition: "Clarity", general: "General" };
   return (
-    <div className="card">
-      <h3 style={{ marginBottom: 6 }}>Judge questions</h3>
-      <p className="muted small" style={{ marginTop: 0 }}>Built from your transcript. Play one, answer out loud.</p>
-      <div className="qa">
-        {questions.map((q, i) => (
-          <div className="card q" key={i} style={{ background: "var(--panel-2)" }}>
-            <button className="btn" onClick={() => void play(i)} disabled={!files.includes(`question_${i}.wav`)}>
-              {playing === i ? "■" : "🔊"}
-            </button>
-            <div>
-              <div className="kind">{KIND[q.kind] ?? q.kind}</div>
-              <div>{q.question}</div>
+    <section className="card answers">
+      <h3>Your Q&amp;A answers</h3>
+      {answers.map((a) => {
+        const s = a.summary;
+        const qa = s?.qa;
+        return (
+          <div className="answer" key={a.sessionId}>
+            <div className="answer-q">
+              <span>{a.question}</span>
+              <button className="icon-btn" onClick={() => void play(a)} disabled={!a.files.includes("audio.wav")}>
+                {playing === a.sessionId ? "■ Stop" : "▶ Listen"}
+              </button>
             </div>
-            {q.t != null && <span className="mono muted small">{fmt(q.t)}</span>}
+            {!s ? (
+              <span className="muted small">Analyzing…</span>
+            ) : s.noSpeech ? (
+              <span className="small" style={{ color: "var(--bad)" }}>No answer was heard.</span>
+            ) : (
+              <div className="answer-stats">
+                <span className={`tag ${qa?.onTopic ? "good" : "bad"}`}>
+                  {qa?.onTopic ? "✓ On topic" : "✗ Drifted off topic"}
+                </span>
+                <span>{fmt(s.durationSec)}</span>
+                <span>{Math.round(s.pacing.meanWpm)} words/min</span>
+                <span>{s.fillers.total} {s.fillers.total === 1 ? "filler" : "fillers"}</span>
+                {s.scores.eyeContact != null && <span>{s.scores.eyeContact} eye contact</span>}
+                {s.fillers.events.length > 0 && s.fillers.events[0].t0 < 3 && <span className="muted">started with “{s.fillers.events[0].token}”</span>}
+              </div>
+            )}
+            {a.text && (
+              <details className="answer-text">
+                <summary>What you said</summary>
+                <p>{a.text}</p>
+              </details>
+            )}
           </div>
-        ))}
-      </div>
-    </div>
+        );
+      })}
+    </section>
   );
 }

@@ -108,11 +108,13 @@ class Index:
                  (scores or {}).get("overall"), json.dumps(scores) if scores else None),
             )
 
-    def list(self, limit: int = 50) -> list[dict]:
+    def list(self, limit: int = 50, exclude_modes: tuple[str, ...] = ("qa",)) -> list[dict]:
+        """Newest first. Q&A answers are part of their parent session, so they are hidden by default."""
+        marks = ",".join("?" for _ in exclude_modes) or "''"
         with self._conn() as c:
             rows = c.execute(
                 "SELECT id, created_at, title, mode, duration, status, overall, scores FROM sessions "
-                "ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+                f"WHERE mode NOT IN ({marks}) ORDER BY created_at DESC LIMIT ?", (*exclude_modes, limit)).fetchall()
         return [{"sessionId": r[0], "createdAt": r[1], "title": r[2], "mode": r[3], "durationSec": r[4],
                  "status": r[5], "overall": r[6], "scores": json.loads(r[7]) if r[7] else None} for r in rows]
 
@@ -130,6 +132,11 @@ def session_path(session_id: str) -> Path:
 
 def delete_session(session_id: str) -> None:
     p = session_path(session_id)
+    meta = p / "session.json"
+    if meta.exists():  # a speech's Q&A answers go with it
+        for a in json.loads(meta.read_text()).get("answers", []):
+            if a.get("sessionId") and a["sessionId"] != session_id:
+                delete_session(a["sessionId"])
     if p.exists():
         shutil.rmtree(p)
     Index().delete(session_id)

@@ -1,7 +1,5 @@
 """Fixture speech → real-time engine (replay) → deep analysis. Uses the real bundled models."""
 
-import json
-
 import pytest
 
 from podium_engine import config, storage
@@ -38,6 +36,16 @@ def test_replay_then_deep_analysis(fixture_wav):
     assert 140 <= s["pacing"]["meanWpm"] <= 190
     assert s["structure"]["conclusionDetected"]
     assert 0 <= s["scores"]["overall"] <= 100
-    q = json.loads((sdir / "questions.json").read_text())["questions"]
-    assert len(q) >= 4
+    # Q&A questions come from the live transcript, instantly, without waiting for Whisper.
+    import time
+
+    from podium_engine.nlp.quick import quick_questions, topic_coverage
+
+    t0 = time.perf_counter()
+    q = quick_questions(sdir)
+    assert time.perf_counter() - t0 < 5
+    assert len(q) == 5
     assert any("microgrid" in x["question"] for x in q)
+    cov = topic_coverage("How would you explain the microgrid to someone new?", "a microgrid is a small local grid")
+    assert cov["onTopic"] and cov["mentioned"] == ["microgrid"]
+    assert not topic_coverage("What is the biggest risk in implementing the pilot project?", "i like pizza")["onTopic"]

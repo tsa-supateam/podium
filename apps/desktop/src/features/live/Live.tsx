@@ -11,7 +11,9 @@ const PACE_COLORS: Record<string, string> = {
 };
 
 export default function Live() {
-  const { settings, replayFrom, replayDuration } = useApp();
+  const { settings, replayFrom, replayDuration, qa } = useApp();
+  const answering = qa?.answering && qa.questions ? qa : null;
+  const question = answering ? answering.questions![answering.picked[answering.index]].question : null;
   const pipRef = useRef<HTMLVideoElement>(null);
   useTicker(10);
 
@@ -35,17 +37,25 @@ export default function Live() {
   const fillerCount = live.fillers.length;
   const perMin = elapsed > 20 ? (fillerCount / elapsed) * 60 : null;
   const flash = live.lastFiller && performance.now() - live.lastFiller.at < 1400 ? live.lastFiller : null;
-  const target = settings.targetMinutes ? settings.targetMinutes * 60 : null;
+  const target = answering ? answering.seconds : settings.targetMinutes ? settings.targetMinutes * 60 : null;
   const counts = audienceStats.counts;
+  const left = answering ? Math.max(0, answering.seconds - elapsed) : null;
+
+  // An answer stops itself at its time limit.
+  useEffect(() => {
+    if (left !== null && left <= 0) void stopSession();
+  }, [left]);
 
   return (
     <div className="live">
       <div className="live-top">
         <div className="stat">
-          <div className="label">{replayFrom ? "Replay" : "Time"}</div>
-          <div className="value">{fmt(elapsed)}</div>
+          <div className="label">{replayFrom ? "Replay" : answering ? "Time left" : "Time"}</div>
+          <div className="value" style={{ color: left !== null && left <= 10 ? "var(--bad)" : undefined }}>
+            {left !== null ? fmt(left) : fmt(elapsed)}
+          </div>
           <div className="sub">
-            {replayDuration ? `of ${fmt(replayDuration)}` : target ? `target ${fmt(target)}` : " "}
+            {replayDuration ? `of ${fmt(replayDuration)}` : answering ? `answer · ${answering.seconds} s` : target ? `target ${fmt(target)}` : " "}
           </div>
         </div>
         <div className="stat" style={{ minWidth: 260, flex: 1 }}>
@@ -82,9 +92,15 @@ export default function Live() {
       </div>
 
       <div className="stage">
+        {question && (
+          <div className="qa-banner">
+            <span className="kind">Question {answering!.index + 1} of {answering!.picked.length}</span>
+            <span>{question}</span>
+          </div>
+        )}
         <AudienceScene size={settings.audienceSize} />
         {flash && (
-          <div className="filler-flash" key={flash.at}>
+          <div className="filler-flash" key={flash.at} style={question ? { top: 96 } : undefined}>
             “{flash.token}”
           </div>
         )}
@@ -130,7 +146,7 @@ export default function Live() {
       </div>
       <div className="stop-bar">
         <button className="btn primary big" style={{ width: "100%" }} onClick={() => void stopSession()}>
-          ■ Finish &amp; analyze
+          {answering ? "■ Finish answer" : "■ Finish speech"}
         </button>
       </div>
     </div>

@@ -2,9 +2,18 @@
 import { create } from "zustand";
 import { useEffect, useState } from "react";
 import { DEFAULT_GAINS, DEFAULT_ZONE_MODEL, type GazeCalibrationGains, type ZoneModel } from "../lib/gaze";
-import type { EngagementTick, FillerEventMsg, GazeSample, PaceTick, SessionBundle } from "../lib/types";
+import type { EngagementTick, FillerEventMsg, GazeSample, PaceTick, Question, SessionBundle } from "../lib/types";
 
-export type Screen = "home" | "setup" | "calibrate" | "live" | "analyzing" | "debrief" | "history";
+export type Screen = "home" | "setup" | "calibrate" | "live" | "qa" | "analyzing" | "debrief" | "history";
+
+export interface QARound {
+  parentId: string;
+  questions: Question[] | null; // null while loading
+  picked: number[]; // indexes into questions, in answer order (max 2)
+  index: number; // which picked question is current; -1 while choosing
+  seconds: number; // answer time limit
+  answering: boolean; // an answer session is recording
+}
 
 export interface Settings {
   title: string;
@@ -32,6 +41,10 @@ interface AppState {
   analysis: { stage: string; pct: number; sessionId: string } | null;
   analysisError: string | null;
   bundle: SessionBundle | null;
+  /** The Q&A round between the speech and its results. index -1 = choosing questions. */
+  qa: QARound | null;
+  /** Background analysis progress of the main speech (shown during Q&A). */
+  mainAnalysis: { stage: string; pct: number; done: boolean } | null;
   toast: string | null;
   set: (p: Partial<AppState>) => void;
   setSettings: (p: Partial<Settings>) => void;
@@ -70,6 +83,8 @@ export const useApp = create<AppState>((set, get) => ({
   analysis: null,
   analysisError: null,
   bundle: null,
+  qa: null,
+  mainAnalysis: null,
   toast: null,
   set: (p) => set(p),
   setSettings: (p) => {

@@ -1,7 +1,7 @@
 """Deep Analysis Engine orchestration (spec §4.2). Runs in its own OS process.
 
 Reads a recorded session folder and writes transcript.json, summary.json,
-questions.json, debrief.txt and debrief.wav. Progress is reported through a
+debrief.txt and debrief.wav. Progress is reported through a
 callback (the CLI prints it as JSON lines for the server to relay).
 """
 
@@ -14,7 +14,8 @@ from pathlib import Path
 
 from .. import config as cfgmod
 from .. import tts
-from ..nlp import debrief, keyphrases, questions
+from ..nlp import debrief, keyphrases
+from ..nlp.quick import topic_coverage
 from ..nlp.text import pos_tag, sentences
 from ..realtime.fillers import FillerEvent, filled_pause_tokens, lexical_fillers, merge_events, norm
 from ..realtime.pace import Word
@@ -23,7 +24,7 @@ from . import prosody, scoring, segmentation
 from .transcribe import transcribe
 
 Progress = Callable[[str, float], None]
-STAGES = ["transcribe", "fillers", "prosody", "pacing", "structure", "keyphrases", "questions", "scoring", "tts"]
+STAGES = ["transcribe", "fillers", "prosody", "pacing", "structure", "keyphrases", "scoring", "tts"]
 
 
 def _refine_like(words: list[Word], events: list[FillerEvent]) -> list[FillerEvent]:
@@ -110,12 +111,10 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
     progress("structure", 0.0)
     struct = scoring.structure(sents, duration, meta.get("targetDurationSec"))
 
-    # 6. keyphrases + 7. questions
+    # 6. keyphrases (follow-up questions are generated right after the speech, from the live
+    #    transcript, by nlp.quick so the user can answer them before this analysis finishes)
     progress("keyphrases", 0.0)
     kps = keyphrases.extract(tr.text, words)
-    progress("questions", 0.0)
-    qs = questions.generate(sents, kps)
-    write_json(session_dir / "questions.json", {"schemaVersion": SCHEMA_VERSION, "questions": qs})
 
     def keyphrase_at(t: float) -> str | None:
         best = None
@@ -187,17 +186,22 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
     deb = debrief.no_speech(summary) if no_speech else debrief.build(summary, keyphrase_at)
     summary["debrief"] = deb
     (session_dir / "debrief.txt").write_text(deb["text"] + "\n")
+    if meta.get("mode") == "qa":
+        # An on-the-spot answer: no spoken debrief, but check it stayed on the question's topic.
+        summary["qa"] = topic_coverage(meta.get("question", ""), tr.text)
+        with_tts = False
     progress("tts", 0.0)
     if with_tts and tts.available():
         try:
-            tts.synthesize_many([(deb["text"], session_dir / "debrief.wav")]
-                                + [(q["question"], session_dir / f"question_{i}.wav") for i, q in enumerate(qs)])
+            tts.synthesize_many([(deb["text"], session_dir / "debrief.wav")])
             summary["debriefAudio"] = "debrief.wav"
         except Exception as e:  # noqa: BLE001
             summary["debriefAudioError"] = str(e)
 
     summary["analysisSec"] = round(time.perf_counter() - t_start, 2)
     write_json(session_dir / "summary.json", summary)
+    # Re-read before writing: the Q&A round links answers into session.json while this runs.
+    meta = json.loads((session_dir / "session.json").read_text())
     meta["status"] = "analyzed"
     meta["durationSec"] = round(duration, 3)
     write_json(session_dir / "session.json", meta)

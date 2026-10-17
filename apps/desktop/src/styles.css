@@ -233,3 +233,33 @@ h3 { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: upp
 .fix-list { margin: 4px 0 8px; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
 .fix-list li::marker { color: var(--accent); font-weight: 700; font-size: 18px; }
 .fix-list .fix-main { margin: 0 0 4px; }
+
+/* Q&A round */
+.qa-page { max-width: 820px; }
+.qa-sub { margin: 4px 0 18px; }
+.qa-list { display: flex; flex-direction: column; gap: 8px; }
+.qa-pick { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; text-align: left; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); }
+.qa-pick:hover { border-color: #3a4254; }
+.qa-pick.on { border-color: var(--accent); background: #f5b14c10; }
+.qa-check { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-weight: 800; color: #1b1203; }
+.qa-pick.on .qa-check { background: var(--accent); border-color: var(--accent); }
+.qa-pick .kind { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+.qa-q { display: block; font-size: 15px; margin-top: 2px; }
+.qa-actions { margin-top: 18px; flex-wrap: wrap; gap: 10px; }
+.small-spinner { width: 18px; height: 18px; border-width: 2px; }
+.qa-prep { max-width: 640px; gap: 14px; }
+.qa-prep-q { font-size: 24px; line-height: 1.3; }
+.qa-count { font-size: 64px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1; }
+.qa-banner { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); max-width: min(760px, 90%); padding: 10px 18px; border-radius: 12px; background: #0b0d12e6; border: 1px solid var(--accent); text-align: center; display: flex; flex-direction: column; gap: 2px; z-index: 2; font-size: 16px; font-weight: 600; }
+.qa-banner .kind { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); font-weight: 700; }
+.answers { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+.answers h3 { margin: 0; }
+.answer { padding-top: 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.answer:first-of-type { border-top: 0; padding-top: 0; }
+.answer-q { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; font-weight: 600; }
+.answer-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; align-items: center; }
+.tag.good { color: var(--good); background: #4fd18b1a; }
+.tag.bad { color: var(--bad); background: #ff6b6b1a; }
+.answer-text summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.answer-text p { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+.fix-next + .answers, .answers + .tabs { margin-top: 16px; }

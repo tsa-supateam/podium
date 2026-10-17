@@ -9,7 +9,6 @@ const STAGES: [string, string][] = [
   ["pacing", "Finding pace changes"],
   ["structure", "Checking structure"],
   ["keyphrases", "Extracting key phrases"],
-  ["questions", "Writing follow-up questions"],
   ["scoring", "Scoring"],
   ["tts", "Recording your spoken debrief"],
 ];

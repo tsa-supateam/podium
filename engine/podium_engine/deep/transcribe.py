@@ -9,6 +9,7 @@ Whisper tends to "clean up" disfluencies. Two tricks keep the fillers:
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -71,7 +72,11 @@ def transcribe(wav: Path, cfg: dict, progress=lambda pct: None) -> Transcript:
         audio = librosa.resample(audio, orig_sr=sr, target_sr=SR)
 
     d = cfg["deep"]
-    model = WhisperModel(str(models_dir() / d["whisper_model"]), device="cpu", compute_type=d["compute_type"])
+    # Half the cores: this often runs while the user is still speaking (Q&A), and the live
+    # engine must keep real time.
+    threads = max(1, (os.cpu_count() or 4) // 2)
+    model = WhisperModel(str(models_dir() / d["whisper_model"]), device="cpu", compute_type=d["compute_type"],
+                         cpu_threads=threads)
     chunks, regions = speech_chunks(audio, d["chunk_max_s"])
     words: list[Word] = []
     for i, (s, e) in enumerate(chunks):

@@ -175,7 +175,16 @@ export interface Question {
   source: string;
 }
 
+export interface AnswerBundle {
+  sessionId: string;
+  question: string;
+  summary: (Summary & { qa?: { terms: string[]; mentioned: string[]; onTopic: boolean } }) | null;
+  text: string;
+  files: string[];
+}
+
 export interface SessionBundle {
+  answers?: AnswerBundle[];
   sessionId: string;
   session: any;
   summary: Summary | null;

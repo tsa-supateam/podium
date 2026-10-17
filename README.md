@@ -30,7 +30,7 @@ Built for the TSA Software Development event. The full design is in
 | **Reactive audience** | 9–18 avatars, each with its own personality. A seating section you ignore drifts toward boredom; look at it and it perks up |
 | **Deep debrief** | Whisper transcript, pitch analysis via Praat, pace change-points (PELT), filler clusters (DBSCAN), structure checks, composite score |
 | **Spoken feedback** | Piper TTS reads the debrief and the follow-up questions aloud |
-| **Q&A generator** | Keyphrases (YAKE + TF-IDF against 60 public-domain speeches) + rule templates → "Where does the figure '90%' come from?" No LLM |
+| **Q&A round** | Right after the speech: 5 questions about what you just said (ready in about 2 s), read aloud. Pick one or two and answer on the spot under a timer. Built from keyphrases (YAKE + TF-IDF against 60 public-domain speeches) and rule templates, with no LLM |
 | **Replay Mode** | Plays a recorded session back through the live pipeline. It's a demo-day safety net if a mic or camera fails |
 | **History** | Every run is saved locally (NDJSON telemetry + SQLite index), with a progress trend |
 

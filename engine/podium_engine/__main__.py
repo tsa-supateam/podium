@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -53,6 +54,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "analyze":
         from .deep.pipeline import analyze
+
+        if hasattr(os, "nice"):
+            os.nice(10)  # background work: never compete with the live engine
 
         def progress(stage: str, pct: float) -> None:
             if args.json_progress:

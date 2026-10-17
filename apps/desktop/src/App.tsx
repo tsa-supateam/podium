@@ -9,6 +9,7 @@ import Calibration from "./features/calibration/Calibration";
 import Live from "./features/live/Live";
 import Analyzing from "./features/live/Analyzing";
 import Debrief from "./features/debrief/Debrief";
+import QA from "./features/qa/QA";
 import { stopSession } from "./features/live/session";
 
 /** Open a session's debrief. A session that was recorded but never analyzed gets analyzed now
@@ -74,16 +75,31 @@ export default function App() {
         case "replay.ended":
           if (useApp.getState().screen === "live") void stopSession();
           break;
-        case "analysis.progress":
-          set({ analysis: { stage: ev.data.stage, pct: ev.data.pct, sessionId: ev.data.sessionId } });
+        case "analysis.progress": {
+          // Several analyses can run at once (the speech, plus each Q&A answer), so route by session.
+          const st = useApp.getState();
+          const d = { stage: ev.data.stage, pct: ev.data.pct, sessionId: ev.data.sessionId };
+          if (d.sessionId === st.qa?.parentId) set({ mainAnalysis: { stage: d.stage, pct: d.pct, done: d.stage === "done" } });
+          if (d.sessionId === st.sessionId && st.screen === "analyzing") set({ analysis: d });
           break;
+        }
         case "audio.silent":
           set({ toast: ev.data.message });
           break;
-        case "analysis.done":
-          set({ analysis: null });
-          if (useApp.getState().screen === "analyzing") void openSession(ev.data.sessionId);
+        case "analysis.done": {
+          const st = useApp.getState();
+          const id = ev.data.sessionId as string;
+          if (id === st.qa?.parentId) set({ mainAnalysis: { stage: "done", pct: 1, done: true } });
+          if (id === st.sessionId && st.screen === "analyzing") {
+            set({ analysis: null });
+            void openSession(id);
+          }
+          // A Q&A answer finished analyzing while its speech's results are open: refresh them.
+          if (st.screen === "debrief" && st.bundle?.answers?.some((a) => a.sessionId === id)) {
+            void openSession(st.bundle.sessionId, false);
+          }
           break;
+        }
         case "analysis.failed":
           set({ analysisError: ev.data.message ?? "Analysis failed" });
           break;
@@ -113,6 +129,7 @@ export default function App() {
             {screen === "setup" && <Setup />}
             {screen === "calibrate" && <Calibration />}
             {screen === "live" && <Live />}
+            {screen === "qa" && <QA />}
             {screen === "analyzing" && <Analyzing />}
             {screen === "debrief" && <Debrief />}
           </>
@@ -125,7 +142,7 @@ export default function App() {
 
 function TopBar() {
   const { screen, go, conn } = useApp();
-  const inSession = screen === "live" || screen === "calibrate";
+  const inSession = screen === "live" || screen === "calibrate" || screen === "qa";
   return (
     <header className="topbar">
       <button className="brand" onClick={() => !inSession && go("home")} disabled={inSession}>
