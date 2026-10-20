@@ -219,3 +219,106 @@ def no_speech(summary: dict) -> dict:
     if g:
         text += f" Your eye contact was still tracked: {round(g['audiencePct'])} percent of your time went to the audience."
     return {"text": text, "strengths": [], "growth": [], "more": [], "drill": None}
+
+
+# ---------------------------------------------------------------- engagement curve
+def said(words, t0: float, t1: float, max_words: int = 7) -> str:
+    """What the speaker said in [t0, t1] (first few words, fillers removed), for quoting."""
+    from .text import strip_fillers
+
+    text = strip_fillers(" ".join(w.w for w in words if t0 <= w.t0 <= t1))
+    parts = text.split()
+    if not parts:
+        return ""
+    return " ".join(parts[:max_words]).strip(" ,.;:") + ("…" if len(parts) > max_words else "")
+
+
+def _longest_run(gaze: list[dict], t0: float, t1: float, zones: set[str]) -> float:
+    longest, start, last = 0.0, None, None
+    for g in gaze:
+        if not t0 <= g["t"] <= t1:
+            continue
+        last = g["t"]
+        z = g.get("zone", "X") if g.get("face", True) else "-"
+        if z in zones and start is None:
+            start = g["t"]
+        elif z not in zones and start is not None:
+            longest, start = max(longest, g["t"] - start), None
+    if start is not None and last is not None:  # still looking there at the last sample
+        longest = max(longest, last - start)
+    return longest
+
+
+def confirm_cause(causes: list[str], d: dict, words, fillers, gaze: list[dict], band: tuple[float, float]) -> str | None:
+    """First cause that the transcript and gaze actually back up in the dip window.
+
+    The live components are smoothed over 10-30 s, so on their own they can blame fillers or
+    pace for a dip where none happened."""
+    t0, t1 = d["t0"] - 5.0, d["t1"]
+    for c in causes:
+        if c == "filler" and any(t0 <= f.t0 <= t1 for f in fillers):
+            return c
+        if c == "gaze" and (_longest_run(gaze, t0, t1, {"N", "X"}) >= 2 or _center_only(gaze, t0, t1)):
+            return c
+        if c == "pace":
+            n = sum(1 for w in words if t0 <= w.t0 <= t1)
+            wpm = 60 * n / max(t1 - t0, 1.0)
+            if not band[0] - 20 <= wpm <= band[1] + 10:
+                return c
+        if c == "silence" and max((b.t0 - a.t1 for a, b in zip(words, words[1:]) if a.t1 <= t1 and b.t0 >= t0), default=0) >= 3:
+            return c
+        if c == "monotony":
+            return c  # measured directly from the voice in this window
+    return None
+
+
+def _center_only(gaze: list[dict], t0: float, t1: float) -> bool:
+    zs = [g.get("zone") for g in gaze if t0 <= g["t"] <= t1 and g.get("face", True)]
+    aud = [z for z in zs if z in ("L", "C", "R")]
+    return len(aud) > 60 and aud.count("C") / len(aud) > 0.9
+
+
+def dip_line(d: dict, words, fillers, gaze: list[dict], notes: bool, band: tuple[float, float]) -> str:
+    """One coaching sentence for an engagement dip, from its cause and what happened in it."""
+    at = f"Engagement dropped at {mmss(d['t'])}"
+    t0, t1 = d["t0"] - 5.0, d["t1"]  # the audience reacts to what happened just before
+    cause = d.get("cause")
+    if cause == "gaze":
+        down = _longest_run(gaze, t0, t1, {"N"})
+        away = _longest_run(gaze, t0, t1, {"X"})
+        if down >= 2:
+            where = "at your notes" if notes else "down"
+            return f"{at} while you looked {where} for {round(down)} s — glance up at the end of each sentence."
+        if away >= 2:
+            return f"{at} while you looked away for {round(away)} s — finish each sentence looking at someone."
+        return f"{at} while your eyes stayed on one part of the room — sweep left and right."
+    if cause == "filler":
+        fs = [f for f in fillers if t0 <= f.t0 <= t1]
+        if fs:
+            toks = ", ".join(dict.fromkeys(f"“{f.token}”" for f in fs))
+            n = len(fs)
+            return f"{at} after {n} filler word{'s' if n > 1 else ''} ({toks}) — pause silently instead."
+        return f"{at} as filler words built up — pause silently instead."
+    if cause == "monotony":
+        q = said(words, t0, t1)
+        on = f" on “{q}”" if q else ""
+        return f"{at} while your voice stayed flat{on} — stress one key word in each sentence."
+    if cause == "pace":
+        n = sum(1 for w in words if t0 <= w.t0 <= t1)
+        span = max(t1 - t0, 1.0)
+        wpm = round(60 * n / span)
+        if wpm > band[1]:
+            return f"{at} while you were speaking at {wpm} words/min — slow down so the point lands."
+        return f"{at} while you were speaking at {wpm} words/min — pick up the pace here."
+    if cause == "silence":
+        gaps = [b.t0 - a.t1 for a, b in zip(words, words[1:]) if a.t1 <= t1 and b.t0 >= t0]
+        gap = max(gaps, default=0.0)
+        long = f" a {round(gap)} s" if gap >= 2 else " a long"
+        return f"{at} during{long} silence — keep pauses under 3 s, or fill them with a question."
+    return f"{at} — a question, a story or a number would win them back here."
+
+
+def peak_line(p: dict, words) -> str:
+    q = said(words, p["t0"], p["t1"])
+    on = f", on “{q}”" if q else ""
+    return f"Your audience was most engaged at {mmss(p['t0'])}{on} — do more of that."

@@ -20,6 +20,7 @@ from ..nlp.text import pos_tag, sentences
 from ..realtime.fillers import FillerEvent, filled_pause_tokens, lexical_fillers, merge_events, norm
 from ..realtime.pace import Word
 from ..storage import SCHEMA_VERSION, Index, read_ndjson, write_json
+from . import engagement as engagement_mod
 from . import prosody, scoring, segmentation
 from .transcribe import transcribe
 
@@ -133,18 +134,18 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
     notes = bool(meta.get("notes", True))
     gaze = scoring.gaze_summary(read_ndjson(tel / "gaze.ndjson"), duration, notes)
     eng = read_ndjson(tel / "engagement.ndjson")
-    engagement = None
-    if eng:
-        Es = [e["E"] for e in eng]
-        low = sorted(eng, key=lambda e: e["E"])[:3]
-        engagement = {
-            "meanE": round(sum(Es) / len(Es), 1), "minE": min(Es),
-            "timeBoredPct": round(100 * sum(1 for e in eng if e["B"] > 0.65) / len(eng), 1),
-            "lowPoints": [{"t": e["t"], "E": e["E"],
-                           "drivers": [k for k, v in sorted((e.get("c") or {}).items(), key=lambda kv: -(kv[1] or 0))
-                                       if v is not None][:2]} for e in low],
-            "series": {"t": [e["t"] for e in eng[::4]], "E": [e["E"] for e in eng[::4]]},
-        }
+    engagement = engagement_mod.summarize(eng)
+    if engagement:
+        gaze_raw = read_ndjson(tel / "gaze.ndjson")
+        band = tuple(pc["band"])
+        for d in engagement["dips"]:
+            d["cause"] = debrief.confirm_cause(d.pop("causes"), d, words, fillers, gaze_raw, band)
+            d["said"] = debrief.said(words, d["t0"] - 5.0, d["t1"])
+            d["line"] = debrief.dip_line(d, words, fillers, gaze_raw, notes, band)
+        if engagement["peak"]:
+            pk = engagement["peak"]
+            pk["said"] = debrief.said(words, pk["t0"], pk["t1"])
+            pk["line"] = debrief.peak_line(pk, words)
 
     fillers_out = {
         "total": len(fillers), "perMinute": round(len(fillers) / minutes, 2),
