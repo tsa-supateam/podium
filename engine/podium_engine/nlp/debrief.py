@@ -222,6 +222,15 @@ def no_speech(summary: dict) -> dict:
 
 
 # ---------------------------------------------------------------- engagement curve
+REACT_S = 8.0  # the audience reacts over several seconds: look this far before a dip for its cause
+
+
+def dip_window(d: dict) -> tuple[float, float]:
+    """[start, end] used to explain a dip: its own span plus the reaction lead-in, which stops at
+    the previous dip (`w0`) so one filler or look-down is never blamed for two dips."""
+    return d.get("w0", d["t0"] - REACT_S), d["t1"]
+
+
 def said(words, t0: float, t1: float, max_words: int = 7) -> str:
     """What the speaker said in [t0, t1] (first few words, fillers removed), for quoting."""
     from .text import strip_fillers
@@ -254,7 +263,7 @@ def confirm_cause(causes: list[str], d: dict, words, fillers, gaze: list[dict], 
 
     The live components are smoothed over 10-30 s, so on their own they can blame fillers or
     pace for a dip where none happened."""
-    t0, t1 = d["t0"] - 5.0, d["t1"]
+    t0, t1 = dip_window(d)
     for c in causes:
         if c == "filler" and any(t0 <= f.t0 <= t1 for f in fillers):
             return c
@@ -281,7 +290,7 @@ def _center_only(gaze: list[dict], t0: float, t1: float) -> bool:
 def dip_line(d: dict, words, fillers, gaze: list[dict], notes: bool, band: tuple[float, float]) -> str:
     """One coaching sentence for an engagement dip, from its cause and what happened in it."""
     at = f"Engagement dropped at {mmss(d['t'])}"
-    t0, t1 = d["t0"] - 5.0, d["t1"]  # the audience reacts to what happened just before
+    t0, t1 = dip_window(d)
     cause = d.get("cause")
     if cause == "gaze":
         down = _longest_run(gaze, t0, t1, {"N"})
@@ -295,7 +304,8 @@ def dip_line(d: dict, words, fillers, gaze: list[dict], notes: bool, band: tuple
     if cause == "filler":
         fs = [f for f in fillers if t0 <= f.t0 <= t1]
         if fs:
-            toks = ", ".join(dict.fromkeys(f"“{f.token}”" for f in fs))
+            shown = {"m": "mm", "mmm": "mm", "hm": "hmm"}  # how a hummed filler reads best
+            toks = ", ".join(dict.fromkeys(f"“{shown.get(f.token, f.token)}”" for f in fs))
             n = len(fs)
             return f"{at} after {n} filler word{'s' if n > 1 else ''} ({toks}) — pause silently instead."
         return f"{at} as filler words built up — pause silently instead."
@@ -307,6 +317,9 @@ def dip_line(d: dict, words, fillers, gaze: list[dict], notes: bool, band: tuple
         n = sum(1 for w in words if t0 <= w.t0 <= t1)
         span = max(t1 - t0, 1.0)
         wpm = round(60 * n / span)
+        if wpm < 60:  # not slow speech: mostly not speaking at all
+            return (f"{at} while you said only {n} word{'s' if n != 1 else ''} in {round(span)} s — "
+                    f"keep talking, and keep pauses to a second or two.")
         if wpm > band[1]:
             return f"{at} while you were speaking at {wpm} words/min — slow down so the point lands."
         return f"{at} while you were speaking at {wpm} words/min — pick up the pace here."

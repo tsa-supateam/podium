@@ -138,9 +138,12 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
     if engagement:
         gaze_raw = read_ndjson(tel / "gaze.ndjson")
         band = tuple(pc["band"])
+        prev_end = 0.0
         for d in engagement["dips"]:
+            d["w0"] = round(max(d["t0"] - debrief.REACT_S, prev_end), 2)
+            prev_end = d["t1"]
             d["cause"] = debrief.confirm_cause(d.pop("causes"), d, words, fillers, gaze_raw, band)
-            d["said"] = debrief.said(words, d["t0"] - 5.0, d["t1"])
+            d["said"] = debrief.said(words, *debrief.dip_window(d))
             d["line"] = debrief.dip_line(d, words, fillers, gaze_raw, notes, band)
         if engagement["peak"]:
             pk = engagement["peak"]

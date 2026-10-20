@@ -35,24 +35,15 @@ interface TimelineProps {
   onSeek: (t: number) => void;
 }
 
-/** Multi-lane timeline: engagement, pace, pitch, fillers, gaze ribbon, all on one time axis. */
+/** Multi-lane timeline: pace, pitch, fillers, gaze ribbon on one time axis (engagement has its own chart). */
 export function Timeline({ s, current, onSeek }: TimelineProps) {
   const W = 1100, padL = 70, padR = 14;
-  const lanes = { eng: [10, 70], pace: [90, 150], pitch: [170, 220], fill: [236, 256], gaze: [272, 288] } as const;
-  const H = 312;
+  const lanes = { pace: [10, 70], pitch: [90, 140], fill: [156, 176], gaze: [192, 208] } as const;
+  const H = 232;
   const dur = Math.max(s.durationSec, 1);
   const x = (t: number) => padL + (t / dur) * (W - padL - padR);
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<{ t: number; px: number } | null>(null);
-
-  const engPath = useMemo(() => {
-    const e = s.engagement?.series;
-    if (!e || !e.t.length) return null;
-    const [y0, y1] = lanes.eng;
-    const y = (v: number) => y1 - (v / 100) * (y1 - y0);
-    const line = e.t.map((t, i) => `${i ? "L" : "M"}${x(t).toFixed(1)},${y(e.E[i]).toFixed(1)}`).join("");
-    return { line, area: `${line}L${x(e.t[e.t.length - 1])},${y1}L${x(e.t[0])},${y1}Z` };
-  }, [s]);
 
   const pacePath = useMemo(() => {
     const p = s.pacing.series;
@@ -98,7 +89,7 @@ export function Timeline({ s, current, onSeek }: TimelineProps) {
         style={{ cursor: "pointer" }}
       >
         {/* lane labels */}
-        {[["Engagement", lanes.eng], ["Speed", lanes.pace], ["Voice pitch", lanes.pitch], ["Fillers", lanes.fill], ["Looking at", lanes.gaze]].map(
+        {[["Speed", lanes.pace], ["Voice pitch", lanes.pitch], ["Fillers", lanes.fill], ["Looking at", lanes.gaze]].map(
           ([label, [a, b]]: any) => (
             <text key={label} x={4} y={(a + b) / 2 + 4} fill="var(--muted)" fontSize="11">
               {label}
@@ -112,16 +103,6 @@ export function Timeline({ s, current, onSeek }: TimelineProps) {
         {s.voice.monotoneSegments.map((m, i) => (
           <rect key={`m${i}`} x={x(m.t0)} width={Math.max(2, x(m.t1) - x(m.t0))} y={lanes.pitch[0]} height={lanes.pitch[1] - lanes.pitch[0]} fill="#f5b14c18" />
         ))}
-        {/* engagement */}
-        <line x1={padL} x2={W - padR} y1={lanes.eng[1]} y2={lanes.eng[1]} stroke="var(--line)" />
-        {engPath ? (
-          <>
-            <path d={engPath.area} fill="#4fd18b22" />
-            <path d={engPath.line} fill="none" stroke="var(--good)" strokeWidth={2} />
-          </>
-        ) : (
-          <text x={padL} y={45} fill="var(--faint)" fontSize="11">no live data</text>
-        )}
         {/* pace band */}
         <rect x={padL} width={W - padL - padR} y={paceY(170)} height={paceY(130) - paceY(170)} fill="#4fd18b10" />
         <line x1={padL} x2={W - padR} y1={lanes.pace[1]} y2={lanes.pace[1]} stroke="var(--line)" />
@@ -245,6 +226,154 @@ export function ZoneBars({ pct, notes = true }: { pct: Record<Zone, number>; not
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- engagement curve
+type Dip = NonNullable<NonNullable<Summary["engagement"]>["dips"]>[number];
+
+export const CAUSE_LABEL: Record<string, string> = {
+  filler: "filler words", monotony: "flat voice", gaze: "eye contact", pace: "speed", silence: "long silence",
+};
+const CAUSE_WEIGHT: Record<string, number> = { filler: 0.25, monotony: 0.3, gaze: 0.35, pace: 0.1, silence: 0.65 };
+
+/** Strongest weighted cause at one point of the series (what was costing engagement right then). */
+function causeAt(series: NonNullable<Summary["engagement"]>["series"], i: number): string | null {
+  let best: string | null = null, bestV = 0.05;
+  for (const c of Object.keys(CAUSE_WEIGHT)) {
+    const v = (series as any)[c]?.[i];
+    if (v != null && v * CAUSE_WEIGHT[c] > bestV) { best = c; bestV = v * CAUSE_WEIGHT[c]; }
+  }
+  return best;
+}
+
+/** Catmull-Rom spline through the points, as SVG cubic Béziers: a smooth curve that still passes through every value. */
+function smoothPath(pts: [number, number][]): string {
+  if (pts.length < 2) return "";
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+const fmtT = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+
+export function engagementHeadline(e: NonNullable<Summary["engagement"]>): string {
+  const E = e.series.E;
+  const engaged = e.engagedPct ?? (E.length ? Math.round((100 * E.filter((v) => v >= 65).length) / E.length) : 0);
+  const lowT = e.dips?.length ? e.dips.reduce((a, b) => (b.E < a.E ? b : a)).t : e.series.t[E.indexOf(Math.min(...E))];
+  return `Audience engaged ${Math.round(engaged)}% of the time${lowT != null ? ` · lowest at ${fmtT(lowT)}` : ""}`;
+}
+
+export function EngagementChart({ e, duration, current, onSeek }: {
+  e: NonNullable<Summary["engagement"]>;
+  duration: number;
+  current: number;
+  onSeek: (t: number) => void;
+}) {
+  const W = 1000, H = 200;
+  const dur = Math.max(duration, e.series.t[e.series.t.length - 1] ?? 1, 1);
+  const x = (t: number) => (t / dur) * W;
+  const y = (v: number) => H - 6 - (v / 100) * (H - 12);
+  const box = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<{ left: number; text: string } | null>(null);
+  const dips: Dip[] = e.dips ?? [];
+  const peak = e.peak ?? null;
+
+  const { line, area } = useMemo(() => {
+    // light 3-point smoothing so 1 Hz jitter doesn't hide the shape
+    const E = e.series.E.map((_, i, a) => (a[Math.max(0, i - 1)] + a[i] + a[Math.min(a.length - 1, i + 1)]) / 3);
+    const pts = e.series.t.map((t, i) => [x(t), y(E[i])] as [number, number]);
+    const ln = smoothPath(pts);
+    const last = pts[pts.length - 1], first = pts[0];
+    return { line: ln, area: pts.length ? `${ln}L${last[0]},${H}L${first[0]},${H}Z` : "" };
+  }, [e, dur]);
+
+  const timeAt = (clientX: number) => {
+    const r = box.current!.getBoundingClientRect();
+    return { t: Math.max(0, Math.min(dur, ((clientX - r.left) / r.width) * dur)), left: ((clientX - r.left) / r.width) * 100 };
+  };
+  const onMove = (clientX: number) => {
+    const { t, left } = timeAt(clientX);
+    const ts = e.series.t;
+    let i = 0;
+    while (i < ts.length - 1 && ts[i + 1] <= t) i++;
+    // inside a dip, show its confirmed cause (the raw live signal can disagree)
+    const dip = dips.find((d) => t >= d.t0 && t <= d.t1);
+    const c = dip ? dip.cause : causeAt(e.series, i);
+    setHover({ left, text: `${fmtT(t)} · engagement ${e.series.E[i] ?? "–"}${c ? ` · ${CAUSE_LABEL[c]}` : ""}` });
+  };
+  const pct = (t: number) => `${(x(t) / W) * 100}%`;
+  const top = (v: number) => `${(y(v) / H) * 100}%`;
+
+  return (
+    <div className="eng-chart">
+      <div
+        className="eng-plot"
+        ref={box}
+        onMouseMove={(ev) => onMove(ev.clientX)}
+        onMouseLeave={() => setHover(null)}
+        onClick={(ev) => onSeek(timeAt(ev.clientX).t)}
+        role="img"
+        aria-label={engagementHeadline(e)}
+      >
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+          <rect x={0} y={y(100)} width={W} height={y(65) - y(100)} fill="var(--good)" opacity={0.07} />
+          <rect x={0} y={y(35)} width={W} height={y(0) - y(35)} fill="var(--bad)" opacity={0.08} />
+          <line x1={0} x2={W} y1={y(65)} y2={y(65)} stroke="var(--good)" strokeOpacity={0.35} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+          <line x1={0} x2={W} y1={y(35)} y2={y(35)} stroke="var(--bad)" strokeOpacity={0.35} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+          {peak && <rect x={x(peak.t0)} width={Math.max(2, x(peak.t1) - x(peak.t0))} y={0} height={H} fill="var(--good)" opacity={0.07} />}
+          <path d={area} fill="url(#engFill)" />
+          <path d={line} fill="none" stroke="var(--accent)" strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
+          <line x1={x(current)} x2={x(current)} y1={0} y2={H} stroke="var(--text)" strokeOpacity={0.7} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+          <defs>
+            <linearGradient id="engFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+        </svg>
+        <span className="eng-band-label good">engaged</span>
+        <span className="eng-band-label bad">bored</span>
+        {dips.map((d, i) => (
+          <button
+            key={i}
+            className="eng-marker dip"
+            style={{ left: pct(d.t), top: top(d.E) }}
+            onClick={(ev) => { ev.stopPropagation(); onSeek(d.t0); }}
+            onMouseEnter={() => setHover({ left: (x(d.t) / W) * 100, text: `${fmtT(d.t)} · engagement ${d.E}${d.cause ? ` · ${CAUSE_LABEL[d.cause]}` : ""}` })}
+            aria-label={`Dip ${i + 1} at ${fmtT(d.t)}`}
+          >
+            {i + 1}
+          </button>
+        ))}
+        {peak && (
+          <button
+            className="eng-marker peak"
+            style={{ left: pct((peak.t0 + peak.t1) / 2), top: top(peak.E) }}
+            onClick={(ev) => { ev.stopPropagation(); onSeek(peak.t0); }}
+            onMouseEnter={() => setHover({ left: (x((peak.t0 + peak.t1) / 2) / W) * 100, text: `${fmtT(peak.t0)} · engagement ${peak.E} · best stretch` })}
+            aria-label={`Best stretch at ${fmtT(peak.t0)}`}
+          >
+            ★
+          </button>
+        )}
+        {hover && (
+          <div className="chart-tip eng-tip" style={{ left: `${Math.min(88, Math.max(12, hover.left))}%` }}>
+            {hover.text}
+          </div>
+        )}
+      </div>
+      <div className="eng-axis">
+        <span>0:00</span>
+        <span>{fmtT(dur / 2)}</span>
+        <span>{fmtT(dur)}</span>
+      </div>
     </div>
   );
 }

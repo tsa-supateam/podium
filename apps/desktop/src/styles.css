@@ -282,3 +282,32 @@ h3 { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: upp
 .chips { flex-wrap: wrap; max-width: 420px; }
 .chip { min-width: 0; padding: 6px 8px; }
 .chip-word { font-size: 12px !important; }
+
+/* audience engagement centerpiece */
+.engagement-card { margin-bottom: 16px; }
+.eng-head { gap: 12px; flex-wrap: wrap; align-items: baseline; margin-bottom: 10px; }
+.eng-head h3 { margin: 0; }
+.eng-headline { font-size: 14px; color: var(--text); }
+.eng-chart { position: relative; }
+.eng-plot { position: relative; height: 200px; cursor: crosshair; border-radius: 10px; overflow: visible; background: var(--bg-2); }
+.eng-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border-radius: 10px; }
+.eng-band-label { position: absolute; left: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; pointer-events: none; }
+.eng-band-label.good { top: 6px; color: var(--good); opacity: 0.8; }
+.eng-band-label.bad { bottom: 6px; color: var(--bad); opacity: 0.8; }
+.eng-marker { position: absolute; transform: translate(-50%, -50%); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; border: 2px solid var(--bg); z-index: 2; padding: 0; }
+.eng-marker.dip { background: var(--bad); color: #fff; }
+.eng-marker.peak { background: var(--good); color: #062a17; font-size: 13px; }
+.eng-marker:hover { transform: translate(-50%, -50%) scale(1.15); }
+.eng-tip { top: 8px; transform: translate(-50%, 0); z-index: 3; }
+.eng-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--faint); margin-top: 4px; font-family: var(--mono); }
+.eng-rows { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.eng-row { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: center; text-align: left; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); font-size: 13px; }
+.eng-row:hover { border-color: #3a4254; }
+.eng-num { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; background: var(--bad); color: #fff; }
+.eng-row.good .eng-num { background: var(--good); color: #062a17; }
+.eng-row .mono { white-space: nowrap; font-size: 12px; }
+@media (max-width: 700px) {
+  .eng-plot { height: 150px; }
+  .eng-row { grid-template-columns: 22px 1fr; }
+  .eng-row .mono { grid-column: 2; }
+}

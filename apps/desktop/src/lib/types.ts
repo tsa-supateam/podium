@@ -136,8 +136,20 @@ export interface Summary {
     meanE: number;
     minE: number;
     timeBoredPct: number;
+    engagedPct?: number;
+    boredPct?: number;
     lowPoints: { t: number; E: number; drivers: string[] }[];
-    series: { t: number[]; E: number[] };
+    series: {
+      t: number[];
+      E: number[];
+      filler?: (number | null)[];
+      monotony?: (number | null)[];
+      gaze?: (number | null)[];
+      pace?: (number | null)[];
+      silence?: (number | null)[];
+    };
+    dips?: { t: number; t0: number; t1: number; E: number; cause: string | null; said: string; line: string }[];
+    peak?: { t0: number; t1: number; E: number; said: string; line: string } | null;
   };
   structure: {
     sentences: number;

@@ -50,7 +50,7 @@ def test_summary_keeps_old_fields_and_adds_cause_series():
 
 
 def test_cause_needs_evidence_and_lines_quote_what_happened():
-    d = {"t": 40.0, "t0": 36.0, "t1": 44.0}
+    d = {"t": 40.0, "t0": 39.0, "t1": 44.0}  # window with the reaction lead-in: 31-44 s
     words = [Word(30 + i * 0.5, 30.4 + i * 0.5, w) for i, w in enumerate("so the battery storage cost has fallen".split())]
     gaze = [{"t": 31 + i / 30, "face": True, "zone": "N"} for i in range(30 * 8)]  # 8 s on notes
     # filler ranks first in the live signal, but there was no filler: fall through to gaze
@@ -64,3 +64,10 @@ def test_cause_needs_evidence_and_lines_quote_what_happened():
     assert debrief.confirm_cause(["filler"], d, words, fillers, [], (130, 170)) == "filler"
     assert "(“um”)" in debrief.dip_line({**d, "cause": "filler"}, words, fillers, [], True, (130, 170))
     assert "battery storage cost" in debrief.dip_line({**d, "cause": "monotony"}, words, [], [], True, (130, 170))
+
+
+def test_mostly_silent_dip_is_not_called_slow_speech():
+    d = {"t": 40.0, "t0": 36.0, "t1": 50.0}
+    words = [Word(37.0, 37.3, "okay"), Word(45.0, 45.4, "so")]
+    line = debrief.dip_line({**d, "cause": "pace"}, words, [], [], True, (130, 170))
+    assert "said only 2 words in 22 s" in line and "words/min" not in line

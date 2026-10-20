@@ -5,7 +5,7 @@ import { useApp } from "../../stores/app";
 import { startSession } from "../live/session";
 import { METRICS, clusteringWord, coachLevel, firstSentence, speedChangeWord, steadinessWord, strengthLine, stripDrillLabel, voiceWord } from "../../lib/metrics";
 import { keyMoments } from "../../lib/moments";
-import { GazeHeatmap, ScoreRing, Timeline, ZoneBars, scoreColor } from "./charts";
+import { EngagementChart, GazeHeatmap, ScoreRing, Timeline, ZoneBars, engagementHeadline, scoreColor } from "./charts";
 
 type Tab = "overview" | "timeline" | "gaze" | "transcript";
 const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
@@ -137,6 +137,10 @@ export default function Debrief() {
         </div>
       </section>
 
+      {s.engagement && s.engagement.series.t.length > 1 && (
+        <EngagementSection e={s.engagement} duration={s.durationSec} current={now} onSeek={seek} />
+      )}
+
       <FixNext s={s} coach={coach} onSeek={seek} onPlay={playVoice} speaking={speaking} canPlay={!!voiceUrl} />
       {voiceUrl && <audio ref={voiceRef} src={voiceUrl} onEnded={() => setSpeaking(false)} />}
 
@@ -172,6 +176,42 @@ function TimeChip({ t, onSeek }: { t: number | null; onSeek: (t: number) => void
     <button className="ts-chip" onClick={() => onSeek(t)} title="Play from here">
       ▶ {fmt(t)}
     </button>
+  );
+}
+
+function EngagementSection({ e, duration, current, onSeek }: {
+  e: NonNullable<Summary["engagement"]>;
+  duration: number;
+  current: number;
+  onSeek: (t: number) => void;
+}) {
+  const dips = e.dips ?? [];
+  return (
+    <section className="card engagement-card">
+      <div className="row eng-head">
+        <h3>Audience engagement</h3>
+        <span className="muted small eng-headline">{engagementHeadline(e)}</span>
+      </div>
+      <EngagementChart e={e} duration={duration} current={current} onSeek={onSeek} />
+      {(dips.length > 0 || e.peak) && (
+        <div className="eng-rows">
+          {dips.map((d, i) => (
+            <button key={i} className="eng-row" onClick={() => onSeek(d.t0)} title={d.said ? `You said: “${d.said}”` : undefined}>
+              <span className="eng-num">{i + 1}</span>
+              <span className="eng-line">{d.line}</span>
+              <span className="mono muted">▶ {fmt(d.t)}</span>
+            </button>
+          ))}
+          {e.peak && (
+            <button className="eng-row good" onClick={() => onSeek(e.peak!.t0)}>
+              <span className="eng-num">★</span>
+              <span className="eng-line">{e.peak.line}</span>
+              <span className="mono muted">▶ {fmt(e.peak.t0)}</span>
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
