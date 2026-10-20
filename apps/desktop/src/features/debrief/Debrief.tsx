@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { engine } from "../../lib/engine";
-import type { AnswerBundle, DebriefItem, SessionBundle, Summary } from "../../lib/types";
+import type { AnswerBundle, DebriefItem, SessionBundle, SessionRow, Summary } from "../../lib/types";
 import { useApp } from "../../stores/app";
 import { startSession } from "../live/session";
-import { METRICS, clusteringWord, firstSentence, speedChangeWord, steadinessWord, strengthLine, stripDrillLabel, voiceWord } from "../../lib/metrics";
+import { METRICS, clusteringWord, coachLevel, firstSentence, speedChangeWord, steadinessWord, strengthLine, stripDrillLabel, voiceWord } from "../../lib/metrics";
+import { keyMoments } from "../../lib/moments";
 import { GazeHeatmap, ScoreRing, Timeline, ZoneBars, scoreColor } from "./charts";
 
 type Tab = "overview" | "timeline" | "gaze" | "transcript";
@@ -72,6 +73,9 @@ export default function Debrief() {
     }
   };
 
+  // Coach mode (the default for new runs) shows levels and encouragement; Judge shows raw scores.
+  // Sessions recorded before the mode existed show scores.
+  const coach = bundle.session?.difficulty === "coach";
   const tabs: [Tab, string][] = [
     ["overview", "Overview"],
     ["gaze", "Eye contact"],
@@ -101,14 +105,20 @@ export default function Debrief() {
 
       <section className="hero-row">
         <div className="hero-score">
-          <ScoreRing score={s.scores.overall} grade={s.scores.grade} />
+          {coach ? <CoachBadge score={s.scores.overall} /> : <ScoreRing score={s.scores.overall} grade={s.scores.grade} />}
+          <Progress sessionId={sid!} overall={s.scores.overall} coach={coach} />
           <div className="chips">
             {METRICS.map((m) => {
               const v = s.scores[m.key];
+              const lvl = v == null ? null : coachLevel(v);
               return (
                 <div className="chip" key={m.key} title={m.what}>
                   <span className="chip-label">{m.short}</span>
-                  <b style={{ color: v == null ? "var(--faint)" : scoreColor(v) }}>{v ?? "–"}</b>
+                  {coach ? (
+                    <b className="chip-word" style={{ color: lvl ? lvl.color : "var(--faint)" }}>{lvl ? lvl.word : "–"}</b>
+                  ) : (
+                    <b style={{ color: v == null ? "var(--faint)" : scoreColor(v) }}>{v ?? "–"}</b>
+                  )}
                 </div>
               );
             })}
@@ -127,7 +137,7 @@ export default function Debrief() {
         </div>
       </section>
 
-      <FixNext s={s} onSeek={seek} onPlay={playVoice} speaking={speaking} canPlay={!!voiceUrl} />
+      <FixNext s={s} coach={coach} onSeek={seek} onPlay={playVoice} speaking={speaking} canPlay={!!voiceUrl} />
       {voiceUrl && <audio ref={voiceRef} src={voiceUrl} onEnded={() => setSpeaking(false)} />}
 
       {(bundle.answers?.length ?? 0) > 0 && <Answers answers={bundle.answers!} />}
@@ -165,8 +175,44 @@ function TimeChip({ t, onSeek }: { t: number | null; onSeek: (t: number) => void
   );
 }
 
-function FixNext({ s, onSeek, onPlay, speaking, canPlay }: {
+function CoachBadge({ score }: { score: number }) {
+  const lvl = coachLevel(score);
+  return (
+    <div className="coach-badge">
+      <div className="stars" aria-label={`${lvl.stars} of 5 stars`}>
+        {"★★★★★".slice(0, lvl.stars)}
+        <span className="stars-off">{"★★★★★".slice(lvl.stars)}</span>
+      </div>
+      <b style={{ color: lvl.color }}>{lvl.word}</b>
+      <span className="muted small">Coach mode</span>
+    </div>
+  );
+}
+
+/** Compare with the previous analyzed run. Coach mode only mentions improvements. */
+function Progress({ sessionId, overall, coach }: { sessionId: string; overall: number; coach: boolean }) {
+  const [prev, setPrev] = useState<{ overall: number; best: number } | null>(null);
+  useEffect(() => {
+    engine
+      .request<SessionRow[]>("sessions.list", { limit: 100 })
+      .then((rows) => {
+        const i = rows.findIndex((r) => r.sessionId === sessionId);
+        const older = rows.slice(i + 1).filter((r) => r.overall != null && r.mode === "practice");
+        if (older.length) setPrev({ overall: older[0].overall!, best: Math.max(...older.map((r) => r.overall!)) });
+      })
+      .catch(() => {});
+  }, [sessionId]);
+  if (!prev) return null;
+  const delta = overall - prev.overall;
+  if (overall > prev.best) return <span className="progress-note good">🏆 Personal best!</span>;
+  if (delta > 0) return <span className="progress-note good">↑ {coach ? "Better" : `+${delta}`} than last run</span>;
+  if (coach) return null;
+  return <span className="progress-note">{delta === 0 ? "Same as last run" : `${delta} vs last run`}</span>;
+}
+
+function FixNext({ s, coach, onSeek, onPlay, speaking, canPlay }: {
   s: Summary;
+  coach: boolean;
   onSeek: (t: number) => void;
   onPlay: () => void;
   speaking: boolean;
@@ -180,8 +226,9 @@ function FixNext({ s, onSeek, onPlay, speaking, canPlay }: {
   const strength = s.debrief.strengths[0];
   return (
     <section className="card fix-next">
+      {coach && strength && <p className="fix-win">✓ {strengthLine(strength.metric, s)}</p>}
       <div className="row fix-head">
-        <h3>{headline.length > 1 ? "Fix these next" : "Fix this next"}</h3>
+        <h3>{coach ? "Next time, try this" : headline.length > 1 ? "Fix these next" : "Fix this next"}</h3>
         <span className="spacer" />
         <button className="icon-btn" onClick={onPlay} disabled={!canPlay} title="Spoken debrief">
           {speaking ? "■ Stop" : "🔊 Play"}
@@ -207,7 +254,7 @@ function FixNext({ s, onSeek, onPlay, speaking, canPlay }: {
           );
         })}
       </ol>
-      {strength && <p className="fix-strength">✓ {strengthLine(strength.metric, s)}</p>}
+      {!coach && strength && <p className="fix-strength">✓ {strengthLine(strength.metric, s)}</p>}
       {smaller.length > 0 && (
         <details className="fix-more">
           <summary>+{smaller.length} smaller {smaller.length === 1 ? "tip" : "tips"}</summary>
@@ -225,14 +272,14 @@ function FixNext({ s, onSeek, onPlay, speaking, canPlay }: {
 }
 
 function Moments({ s, onSeek }: { s: Summary; onSeek: (t: number) => void }) {
-  const label: Record<string, string> = { filler_cluster: "Filler burst", monotone: "Flat voice", rush: "Too fast", notes_stare: "Long look at notes", look_down: "Looked down" };
-  if (!s.highlights.length) return <p className="muted">No key moments. Nice and steady.</p>;
+  const moments = keyMoments(s);
+  if (!moments.length) return <p className="muted">No key moments. Nice and steady.</p>;
   return (
     <div className="moments">
-      {s.highlights.slice(0, 10).map((h, i) => (
-        <button key={i} className="moment" onClick={() => onSeek(h.t)}>
-          <span>{label[h.kind] ?? h.kind}</span>
-          <span className="mono muted">▶ {fmt(h.t)}</span>
+      {moments.map((m, i) => (
+        <button key={i} className={`moment ${m.good ? "good" : ""}`} onClick={() => onSeek(m.t)}>
+          <span>{m.good ? "★ " : ""}{m.label}</span>
+          <span className="mono muted">▶ {fmt(m.t)}</span>
         </button>
       ))}
     </div>

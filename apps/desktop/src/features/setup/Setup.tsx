@@ -99,6 +99,24 @@ export default function Setup() {
               <input value={settings.title} onChange={(e) => setSettings({ title: e.target.value })} />
             </div>
             <div className="field">
+              <label>Mode</label>
+              <div className="segmented" role="radiogroup" aria-label="Mode">
+                <button role="radio" aria-checked={settings.difficulty === "coach"} className={settings.difficulty === "coach" ? "on" : ""}
+                  onClick={() => setSettings({ difficulty: "coach" })}>
+                  Coach
+                </button>
+                <button role="radio" aria-checked={settings.difficulty === "judge"} className={settings.difficulty === "judge" ? "on" : ""}
+                  onClick={() => setSettings({ difficulty: "judge" })}>
+                  Judge
+                </button>
+              </div>
+              <span className="muted small">
+                {settings.difficulty === "coach"
+                  ? "Practice: live tips, a friendlier audience, and encouraging results."
+                  : "Test conditions: no tips, a strict audience, and scores out of 100."}
+              </span>
+            </div>
+            <div className="field">
               <label>Notes</label>
               <div className="segmented" role="radiogroup" aria-label="Notes">
                 <button role="radio" aria-checked={settings.notes} className={settings.notes ? "on" : ""}

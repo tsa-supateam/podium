@@ -174,7 +174,8 @@ class Server:
         sid = storage.new_session_id()
         sdir = storage.session_path(sid)
         extra = {"targetDurationSec": d.get("targetDurationSec"), "audienceSize": d.get("audienceSize", 15),
-                 "notes": bool(d.get("notes", True))}
+                 "notes": bool(d.get("notes", True)),
+                 "difficulty": "judge" if d.get("difficulty") == "judge" else "coach"}
         title = d.get("title") or "Practice run"
         replay_from = d.get("replaySessionId")
         mode = "replay" if replay_from else d.get("mode", "practice")

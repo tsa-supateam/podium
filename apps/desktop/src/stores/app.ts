@@ -24,6 +24,7 @@ export interface Settings {
   showCamera: boolean;
   audioDevice: string | null; // browser deviceId
   notes: boolean; // speaking with notes/slides (false: looking down counts as looking away)
+  difficulty: "coach" | "judge"; // coach: friendlier audience, live cues, encouraging results
 }
 
 interface AppState {
@@ -72,6 +73,7 @@ export const useApp = create<AppState>((set, get) => ({
     showCamera: true,
     audioDevice: null,
     notes: true,
+    difficulty: "coach",
     ...savedSettings(),
   },
   calibrated: false,

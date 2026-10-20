@@ -3,6 +3,7 @@ import { cameraStream } from "../../lib/camera";
 import { zoneNames, type Zone } from "../../lib/types";
 import { live, useApp, useTicker } from "../../stores/app";
 import AudienceScene, { audienceStats } from "../audience/Audience";
+import CueWord from "./Cue";
 import { stopSession } from "./session";
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -104,6 +105,7 @@ export default function Live() {
             “{flash.token}”
           </div>
         )}
+        {settings.difficulty === "coach" && <CueWord />}
         {replayFrom && (
           <div className="replay-banner">
             <span className="pill warn">
@@ -189,7 +191,7 @@ function Components() {
   const rows: [string, number | null | undefined, string][] = [
     ["Filler words", c?.filler, "How often you said um, uh, like… in the last 30 seconds"],
     ["Flat voice", c?.monotony, "How little your pitch and volume changed in the last 10 seconds"],
-    ["Looking away", c?.gaze, "Time not looking at the audience in the last 10 seconds"],
+    ["Eye contact", c?.gaze, "Time away from the audience, or only looking at one part of the room (last 10 s)"],
     ["Speed", c?.pace, "How far your speed is from a comfortable 150 words per minute"],
   ];
   if (c?.silence != null) rows.push(["Long silence", c.silence, "You've been quiet for a while"]);

@@ -26,7 +26,8 @@ from ..paths import models_dir
 from ..storage import SCHEMA_VERSION, Index, TelemetryWriter, read_ndjson, write_json
 from . import fusion
 from .dsp import RingBuffer, StreamingVAD, VadState, hysteresis_step, rms_db, spectral_flux, yin
-from .fillers import FilledPauseDetector, FillerEvent, filled_pause_tokens, lexical_fillers, vosk_soundalikes
+from .fillers import FilledPauseDetector, FillerEvent, filled_pause_tokens, lexical_fillers
+from .live_whisper import LiveWhisper
 from .pace import Word, articulation_rate, pace_label, rolling_wpm
 
 log = logging.getLogger("podium.rt")
@@ -204,6 +205,12 @@ class RealtimeEngine:
         self._wav.setsampwidth(2)
         self._wav.setframerate(self.sr)
 
+        # Accurate live words (fillers, captions) come from Whisper on each stretch of speech.
+        self.live_words: list[Word] = []
+        self._chunk_start: float | None = None
+        self._filler_lock = threading.Lock()
+        self.live_asr = LiveWhisper(self.cfg, self._on_live_words)
+
         self._running = threading.Event()
         self._thread: threading.Thread | None = None
         self._source: MicSource | FileSource | PushSource | None = None
@@ -231,9 +238,13 @@ class RealtimeEngine:
         self._running.clear()
         if self._thread:
             self._thread.join(timeout=5)
-        # flush the recognizer's last utterance
+        # flush the recognizer's last utterance, and transcribe the speech still in progress
         final = json.loads(self.rec.FinalResult())
         self._on_final(final)
+        if self._chunk_start is not None:
+            self._submit_chunk(self._chunk_start, self.t)
+            self._chunk_start = None
+        self.live_asr.close()
         self._wav.close()
         self.tel.flush()
         self.meta["durationSec"] = round(self.t, 3)
@@ -299,10 +310,17 @@ class RealtimeEngine:
                     self.tel.write("pauses", pause)
                 self._pause_start = None
                 self._speech_start = start
+                self._chunk_start = max(0.0, start - 0.2)
             elif change is False:
                 self._pause_start = t - v["min_silence_ms"] / 1000
+                if self._chunk_start is not None:  # speaker paused: transcribe what they just said
+                    self._submit_chunk(self._chunk_start, t)
+                    self._chunk_start = None
         if self.vad_state.speaking:
             self._last_speech_t = t
+            if self._chunk_start is not None and t - self._chunk_start >= self.cfg["live_asr"]["max_chunk_s"]:
+                self._submit_chunk(self._chunk_start, t)
+                self._chunk_start = t
 
         # Pitch / energy (64 ms window ending now)
         if cursor >= self.frame:
@@ -326,7 +344,7 @@ class RealtimeEngine:
                 self.tel.write("prosody", {"t": round(t, 3), "f0": round(f0, 1), "st": round(float(st), 2),
                                            "rmsDb": round(db, 1), "voiced": voiced})
             ev = self.fpd.push(t, f0 if self.vad_state.speaking else 0.0, flux)
-            if ev:
+            if ev and self.cfg["fillers"].get("fpd_live", False):
                 self._add_filler(ev)
 
         # Vosk (100 ms chunks)
@@ -347,51 +365,48 @@ class RealtimeEngine:
 
     # -- ASR handling ------------------------------------------------------
     def _on_partial(self, res: dict, t: float) -> None:
-        """Partial hypotheses carry word timings, so fillers can be flagged mid-utterance (spec: ≤ 600 ms)."""
-        text = res.get("partial", "").strip()
+        """Vosk partial words (with timings) keep the speed reading current between Whisper chunks."""
         items = res.get("partial_result") or []
-        words = [Word(float(i["start"]), float(i["end"]), i["word"], float(i.get("conf", 1.0))) for i in items]
-        self.provisional = words
-        if text and len(text.split()) != self._partial_n:
-            self._partial_n = len(text.split())
-            self.emit({"type": "transcript.partial", "t": round(t, 3), "data": {"text": text}})
-        # A word is "settled" once another word follows it or a short pause has passed; earlier
-        # words in a partial rarely change, the last one often does.
-        settled = [w for k, w in enumerate(words) if k < len(words) - 1 or t - w.t1 > 0.35]
-        if not settled:
-            return
-        f = self.cfg["fillers"]
-        ctx = self.words[-3:]
-        lex = lexical_fillers(ctx + words, f["lexical"], sentence_starts={len(ctx)} if ctx else {0})
-        sound = vosk_soundalikes(settled, f["vosk_soundalikes"], f["soundalike_min_dur"], self._pitch_std)
-        fp = filled_pause_tokens(settled, f["filled_pauses"], "vosk")
-        last_settled = settled[-1].t1
-        for ev in lex + sound + fp:
-            if words[0].t0 - 1e-6 <= ev.t0 and ev.t1 <= last_settled + 1e-6:
-                self._add_filler(ev)
+        self.provisional = [Word(float(i["start"]), float(i["end"]), i["word"], float(i.get("conf", 1.0))) for i in items]
 
     def _on_final(self, res: dict) -> None:
         self.provisional.clear()
-        self._partial_n = 0
-        self._partial_t = self.t
         items = res.get("result") or []
         if not items:
             return
         new_words = [Word(float(i["start"]), float(i["end"]), i["word"], float(i.get("conf", 1.0))) for i in items]
         for w in new_words:
-            self.tel.write("words", {"t0": round(w.t0, 3), "t1": round(w.t1, 3), "w": w.w, "p": round(w.p, 2),
-                                     "src": "vosk"})
-        ctx = self.words[-3:]
-        self.words.extend(new_words)
-        f = self.cfg["fillers"]
-        lex = lexical_fillers(ctx + new_words, f["lexical"], sentence_starts={len(ctx)})
-        sound = vosk_soundalikes(new_words, f["vosk_soundalikes"], f["soundalike_min_dur"], self._pitch_std)
-        fp = filled_pause_tokens(new_words, f["filled_pauses"], "vosk")
-        for ev in lex + sound + fp:
-            if ev.t0 >= new_words[0].t0 - 1e-6:
-                self._add_filler(ev)
+            self.tel.write("vosk", {"t0": round(w.t0, 3), "t1": round(w.t1, 3), "w": w.w, "p": round(w.p, 2)})
+        self.words.extend(new_words)  # word count for WPM only; too inaccurate for fillers or captions
+
+    # -- accurate live words (Whisper) -----------------------------------
+    def _submit_chunk(self, t0: float, t1: float) -> None:
+        start = max(0, int(t0 * self.sr))
+        n = int(t1 * self.sr) - start
+        if n <= 0:
+            return
+        try:
+            audio = self.ring.read(start, min(n, self.ring.written - start))
+        except IndexError:
+            return
+        self.live_asr.submit(start / self.sr, audio)
+
+    def _on_live_words(self, words: list[Word]) -> None:
+        """Runs on the live-whisper thread."""
+        ctx = self.live_words[-3:]
+        self.live_words.extend(words)
+        for w in words:
+            self.tel.write("words", {"t0": round(w.t0, 3), "t1": round(w.t1, 3), "w": w.w, "p": round(w.p, 3),
+                                     "src": "whisper-live"})
         self.emit({"type": "transcript.final", "t": round(self.t, 3),
-                   "data": {"words": [{"w": w.w, "t0": round(w.t0, 2), "t1": round(w.t1, 2)} for w in new_words]}})
+                   "data": {"words": [{"w": w.w, "t0": round(w.t0, 2), "t1": round(w.t1, 2)} for w in words]}})
+        f = self.cfg["fillers"]
+        sure = [w for w in words if w.p >= self.cfg["live_asr"]["min_filler_prob"]]
+        events = filled_pause_tokens(sure, f["filled_pauses"], "live")
+        events += lexical_fillers(ctx + words, f["lexical"], src="live", sentence_starts={len(ctx)})
+        for ev in sorted(events, key=lambda e: e.t0):
+            if ev.t0 >= words[0].t0 - 1e-6:
+                self._add_filler(ev)
 
     def _pitch_std(self, t0: float, t1: float) -> float | None:
         sts = [s for (t, s, _, v) in self.prosody if v and t0 <= t <= t1]
@@ -399,10 +414,11 @@ class RealtimeEngine:
 
     def _add_filler(self, ev: FillerEvent) -> None:
         win = self.cfg["fillers"]["merge_window"]
-        for prev in reversed(self.fillers[-6:]):
-            if ev.t0 <= prev.t1 + win and ev.t1 >= prev.t0 - win:
-                return  # already counted by another detector
-        self.fillers.append(ev)
+        with self._filler_lock:
+            for prev in reversed(self.fillers[-6:]):
+                if ev.t0 <= prev.t1 + win and ev.t1 >= prev.t0 - win:
+                    return  # already counted by another detector
+            self.fillers.append(ev)
         self.tel.write("fillers", ev.as_dict())
         self.emit({"type": "filler.detected", "t": round(self.t, 3),
                    "data": {**ev.as_dict(), "total": len(self.fillers)}})
@@ -472,6 +488,8 @@ class RealtimeEngine:
             comps_out = {**comps, "silence": None}
 
         b_raw = fusion.fuse(comps, weights)
+        if self.meta.get("difficulty", "coach") == "coach":
+            b_raw *= self.cfg["boredom"]["coach_leniency"]  # a friendlier audience while learning
         B = self.integ.step(b_raw, b["tick_s"])
         E = round(100 * (1 - B))
         state = "engaged" if B < 0.35 else "bored" if B > 0.65 else "neutral"

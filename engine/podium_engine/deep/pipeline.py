@@ -76,7 +76,7 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
     whisper_fp = filled_pause_tokens(words, f["filled_pauses"], "whisper")
     lex = _refine_like(words, lexical_fillers(words, f["lexical"], src="whisper", sentence_starts=starts))
     rt = [FillerEvent(r["t0"], r["t1"], r["token"], r["class"], r["conf"], r["src"])
-          for r in read_ndjson(tel / "fillers.ndjson") if r.get("src") in ("fpd", "vosk") and r.get("class") == "filled_pause" and r.get("conf", 0) >= 0.7]
+          for r in read_ndjson(tel / "fillers.ndjson") if r.get("src") == "fpd" and r.get("class") == "filled_pause" and r.get("conf", 0) >= 0.8]
     # an acoustic detection only counts if Whisper heard no real word there
     rt = [e for e in rt if not any(w.t0 < e.t1 and w.t1 > e.t0 and norm(w.w) not in f["filled_pauses"] for w in words)]
     fillers = merge_events(whisper_fp + lex + rt, f["merge_window"])

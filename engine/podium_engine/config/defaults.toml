@@ -53,12 +53,21 @@ k_down = 0.10                 # 1/10 s: ~10 s to win it back
 tick_s = 0.25
 silence_grace_s = 3.0
 avatar_beta = 0.45            # how strongly a seating section reacts to being looked at
+coach_leniency = 0.8          # Coach mode scales boredom down; Judge mode uses the full value
+
+[live_asr]
+model = "faster-whisper-base.en"
+threads = 2
+max_chunk_s = 4.0             # long stretches without a pause are cut so alerts stay timely
+max_new_tokens = 64
+min_filler_prob = 0.1           # Whisper is unsure of filler tokens: a real "Umm" scored 0.14
 
 [deep]
 whisper_model = "faster-whisper-base.en"
 compute_type = "int8"
 chunk_max_s = 25.0            # keep each chunk under Whisper's 30 s window so the prompt applies everywhere
-initial_prompt = "Umm, so, uh, I was like, you know, thinking... Hmm, okay. Uh, right."
+# Only filled pauses: a prompt with "like"/"you know" made Whisper invent those words on unclear audio.
+initial_prompt = "Umm, uh... hmm. Uh, okay."
 dbscan_eps = 4.0
 dbscan_min = 3
 monotone_win_s = 8.0

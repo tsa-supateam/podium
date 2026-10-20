@@ -33,14 +33,19 @@ TEMPLATE_WORDS = {
 
 
 def quick_questions(session_dir: Path, k: int = 5) -> list[dict]:
-    rows = read_ndjson(session_dir / "telemetry" / "words.ndjson")
+    tel = session_dir / "telemetry"
+    rows = read_ndjson(tel / "words.ndjson")
+    # Live Whisper words are punctuated; older sessions (and a failed live model) only have Vosk.
+    punctuated = any(r.get("src") == "whisper-live" for r in rows)
+    if not punctuated:
+        rows = rows or read_ndjson(tel / "vosk.ndjson")
     words = [Word(r["t0"], r["t1"], r["w"], r.get("p", 1.0)) for r in rows]
     out: list[dict] = []
     if len(words) >= 15:
-        sents = sentences(words)  # no punctuation from Vosk: split on pauses > 1.2 s
+        sents = sentences(words)  # without punctuation, sentences split on pauses > 1.2 s
         text = " ".join(w.w for w in words)
         kps = keyphrases.extract(text, words)
-        out = [q for q in questions.generate(sents, kps, k=k, punctuated=False) if q["kind"] != "general"]
+        out = [q for q in questions.generate(sents, kps, k=k, punctuated=punctuated) if q["kind"] != "general"]
     for g in GENERAL:
         if len(out) >= k:
             break

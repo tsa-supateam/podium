@@ -263,3 +263,22 @@ h3 { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: upp
 .answer-text summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .answer-text p { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
 .fix-next + .answers, .answers + .tabs { margin-top: 16px; }
+
+/* coach cue word */
+.cue { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); padding: 10px 26px; border-radius: 99px; font-size: 26px; font-weight: 800; letter-spacing: 0.01em; z-index: 3; pointer-events: none; animation: cue-in 0.25s ease; background: #0b0d12e0; border: 2px solid var(--accent); color: var(--accent-2); box-shadow: 0 8px 30px #0008; }
+.cue.good { border-color: #4fd18b88; color: var(--good); font-size: 18px; padding: 6px 18px; opacity: 0.85; }
+@keyframes cue-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* coach mode results */
+.coach-badge { width: 200px; height: 200px; border-radius: 50%; border: 10px solid var(--panel-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; }
+.coach-badge .stars { font-size: 24px; color: var(--accent); letter-spacing: 2px; }
+.coach-badge .stars-off { color: var(--line); }
+.coach-badge b { font-size: 26px; }
+.chip-word { font-size: 13px !important; line-height: 1.6 !important; white-space: nowrap; }
+.progress-note { font-size: 13px; color: var(--muted); }
+.progress-note.good { color: var(--good); font-weight: 600; }
+.fix-win { margin: 0 0 10px; color: var(--good); font-size: 16px; font-weight: 600; }
+.moment.good { border-color: #4fd18b55; color: var(--good); }
+.chips { flex-wrap: wrap; max-width: 420px; }
+.chip { min-width: 0; padding: 6px 8px; }
+.chip-word { font-size: 12px !important; }

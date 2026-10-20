@@ -16,7 +16,7 @@ from typing import Any
 from ..paths import data_dir, sessions_dir
 
 SCHEMA_VERSION = "1.0.0"
-CHANNELS = ("words", "fillers", "pace", "prosody", "gaze", "engagement", "pauses")
+CHANNELS = ("words", "vosk", "fillers", "pace", "prosody", "gaze", "engagement", "pauses")
 
 
 def new_session_id() -> str:

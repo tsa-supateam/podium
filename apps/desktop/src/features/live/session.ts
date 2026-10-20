@@ -34,6 +34,7 @@ export async function startSession(replayFrom: string | null = null, answer: Ans
     targetDurationSec: answer ? answer.seconds : s.targetMinutes ? s.targetMinutes * 60 : null,
     audienceSize: s.audienceSize,
     notes: answer ? false : s.notes, // an on-the-spot answer has no notes
+    difficulty: s.difficulty,
     replaySessionId: replayFrom,
     speed: 1,
     calibration: st.calibrated ? { zoneModel: st.zoneModel, gains: st.gains, flipYaw: s.flipYaw } : null,
