@@ -16,15 +16,16 @@ export interface QARound {
 }
 
 export interface Settings {
-  title: string;
+  prompt: string; // the topic for the next run ("" = free talk)
+  promptCategory: string | null; // limit random prompts to one category
+  gazeMode: "room" | "camera"; // simulated audience (left/center/right) or direct camera (up/down)
   targetMinutes: number | null;
-  audienceSize: number;
   recordVideo: boolean;
   flipYaw: boolean;
   showCamera: boolean;
   audioDevice: string | null; // browser deviceId
   notes: boolean; // speaking with notes/slides (false: looking down counts as looking away)
-  difficulty: "coach" | "judge"; // coach: friendlier audience, live cues, encouraging results
+  difficulty: "coach" | "judge"; // shown as Practice / Assessment: practice adds live cues and encouraging results
 }
 
 interface AppState {
@@ -44,6 +45,7 @@ interface AppState {
   bundle: SessionBundle | null;
   /** The Q&A round between the speech and its results. index -1 = choosing questions. */
   qa: QARound | null;
+  paused: boolean;
   /** Background analysis progress of the main speech (shown during Q&A). */
   mainAnalysis: { stage: string; pct: number; done: boolean } | null;
   toast: string | null;
@@ -65,9 +67,10 @@ export const useApp = create<AppState>((set, get) => ({
   conn: "connecting",
   models: null,
   settings: {
-    title: "Practice run",
-    targetMinutes: 5,
-    audienceSize: 15,
+    prompt: "",
+    promptCategory: null,
+    gazeMode: "room",
+    targetMinutes: 3,
     recordVideo: true,
     flipYaw: false,
     showCamera: true,
@@ -86,6 +89,7 @@ export const useApp = create<AppState>((set, get) => ({
   analysisError: null,
   bundle: null,
   qa: null,
+  paused: false,
   mainAnalysis: null,
   toast: null,
   set: (p) => set(p),

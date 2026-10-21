@@ -22,5 +22,8 @@ describe("coach cues", () => {
     expect(cue({ sideShare: { L: 0.01, R: 0.5, samples: 400 } })).toBe("Look left");
     expect(cue({ sideShare: { L: 0.5, R: 0.02, samples: 400 } })).toBe("Look right");
   });
+  it("never asks to look left or right in Direct camera mode", () => {
+    expect(cue({ sideShare: { L: 0.01, R: 0.5, samples: 400 }, camera: true })).toBe("Good");
+  });
   it("prompts after a long silence", () => expect(cue({ speaking: false, silenceSec: 5 })).toBe("Keep going"));
 });

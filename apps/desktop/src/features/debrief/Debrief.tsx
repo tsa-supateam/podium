@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { engine } from "../../lib/engine";
 import type { AnswerBundle, DebriefItem, SessionBundle, SessionRow, Summary } from "../../lib/types";
 import { useApp } from "../../stores/app";
-import { startSession } from "../live/session";
-import { METRICS, clusteringWord, coachLevel, firstSentence, speedChangeWord, steadinessWord, strengthLine, stripDrillLabel, voiceWord } from "../../lib/metrics";
+import { CONTENT_PARTS, DELIVERY_METRICS, OVERALL_HOW, TOP_METRICS, clusteringWord, coachLevel, firstSentence, speedChangeWord, steadinessWord, strengthLine, stripDrillLabel, voiceWord } from "../../lib/metrics";
 import { keyMoments } from "../../lib/moments";
 import { EngagementChart, GazeHeatmap, ScoreRing, Timeline, ZoneBars, engagementHeadline, scoreColor } from "./charts";
 
@@ -73,7 +72,7 @@ export default function Debrief() {
     }
   };
 
-  // Coach mode (the default for new runs) shows levels and encouragement; Judge shows raw scores.
+  // Practice mode ("coach", the default) shows levels and encouragement; Assessment ("judge") shows raw scores.
   // Sessions recorded before the mode existed show scores.
   const coach = bundle.session?.difficulty === "coach";
   const tabs: [Tab, string][] = [
@@ -93,7 +92,6 @@ export default function Debrief() {
           </div>
         </div>
         <span className="spacer" />
-        <button className="btn" onClick={() => startSession(sid!).catch((e) => set({ toast: e.message }))}>▶ Replay</button>
         <button className="btn primary" onClick={() => go("setup")}>Practice again</button>
       </div>
 
@@ -107,8 +105,8 @@ export default function Debrief() {
         <div className="hero-score">
           {coach ? <CoachBadge score={s.scores.overall} /> : <ScoreRing score={s.scores.overall} grade={s.scores.grade} />}
           <Progress sessionId={sid!} overall={s.scores.overall} coach={coach} />
-          <div className="chips">
-            {METRICS.map((m) => {
+          <div className="chips chips-top">
+            {TOP_METRICS.map((m) => {
               const v = s.scores[m.key];
               const lvl = v == null ? null : coachLevel(v);
               return (
@@ -144,7 +142,7 @@ export default function Debrief() {
       <FixNext s={s} coach={coach} onSeek={seek} onPlay={playVoice} speaking={speaking} canPlay={!!voiceUrl} />
       {voiceUrl && <audio ref={voiceRef} src={voiceUrl} onEnded={() => setSpeaking(false)} />}
 
-      {(bundle.answers?.length ?? 0) > 0 && <Answers answers={bundle.answers!} />}
+      {s.content && <ContentCard s={s} coach={coach} answers={bundle.answers ?? []} />}
 
       <div className="tabs">
         {tabs.map(([k, label]) => (
@@ -164,6 +162,8 @@ export default function Debrief() {
         )}
         {tab === "transcript" && <TranscriptTab bundle={bundle} now={now} onSeek={seek} />}
       </div>
+
+      <DeliveryCard s={s} coach={coach} />
 
       <DetailedStats s={s} />
     </div>
@@ -224,7 +224,7 @@ function CoachBadge({ score }: { score: number }) {
         <span className="stars-off">{"★★★★★".slice(lvl.stars)}</span>
       </div>
       <b style={{ color: lvl.color }}>{lvl.word}</b>
-      <span className="muted small">Coach mode</span>
+      <span className="muted small">Practice mode</span>
     </div>
   );
 }
@@ -266,7 +266,7 @@ function FixNext({ s, coach, onSeek, onPlay, speaking, canPlay }: {
   const strength = s.debrief.strengths[0];
   return (
     <section className="card fix-next">
-      {coach && strength && <p className="fix-win">✓ {strengthLine(strength.metric, s)}</p>}
+      {coach && strength && <p className="fix-win">✓ {strengthLine(strength.metric, s, strength.text)}</p>}
       <div className="row fix-head">
         <h3>{coach ? "Next time, try this" : headline.length > 1 ? "Fix these next" : "Fix this next"}</h3>
         <span className="spacer" />
@@ -294,7 +294,7 @@ function FixNext({ s, coach, onSeek, onPlay, speaking, canPlay }: {
           );
         })}
       </ol>
-      {!coach && strength && <p className="fix-strength">✓ {strengthLine(strength.metric, s)}</p>}
+      {!coach && strength && <p className="fix-strength">✓ {strengthLine(strength.metric, s, strength.text)}</p>}
       {smaller.length > 0 && (
         <details className="fix-more">
           <summary>+{smaller.length} smaller {smaller.length === 1 ? "tip" : "tips"}</summary>
@@ -357,8 +357,9 @@ function DetailedStats({ s }: { s: Summary }) {
         </div>
       </div>
       <h3 style={{ marginTop: 18 }}>How it's scored</h3>
+      <p className="muted small" style={{ marginTop: 0 }}>{OVERALL_HOW}</p>
       <div className="how-grid">
-        {METRICS.map((m) => (
+        {[...TOP_METRICS, ...DELIVERY_METRICS].map((m) => (
           <div key={m.key}>
             <b>
               {m.title} · {s.scores[m.key] ?? "–"}/100
@@ -387,10 +388,10 @@ function GazeTab({ s }: { s: Summary }) {
         {!notes && <p className="muted small" style={{ marginBottom: 0 }}>No-notes run: looking down counts as looking away.</p>}
       </div>
       <div className="card grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        <ZoneBars pct={g.zonePct} notes={notes} />
+        <ZoneBars pct={g.zonePct} notes={notes} camera={g.mode === "camera"} />
         <div className="kv">
-          <span>On audience</span><span>{g.audiencePct}%</span>
-          <span>Spread across room</span><span>{Math.round(g.balanceEntropy * 100)}%</span>
+          <span>{g.mode === "camera" ? "Looking at camera" : "On audience"}</span><span>{g.audiencePct}%</span>
+          {g.mode !== "camera" && <><span>Spread across room</span><span>{Math.round(g.balanceEntropy * 100)}%</span></>}
           <span>{notes ? "Longest notes look" : "Longest look down"}</span><span>{g.longestNotesStareSec}s</span>
           <span>{notes ? "Notes looks > 5 s" : "Looks down > 2.5 s"}</span><span>{g.notesStares.length}</span>
           <span>Face visible</span><span>{Math.round(g.faceVisibleFrac * 100)}%</span>
@@ -424,6 +425,12 @@ function TranscriptTab({ bundle, now, onSeek }: { bundle: SessionBundle; now: nu
           </span>
         ))}
       </div>
+      {(bundle.answers ?? []).map((a, i) => (
+        <div key={a.sessionId} className="transcript-qa">
+          <h3>Q&amp;A {i + 1}: {a.question}</h3>
+          <p>{a.text || <span className="muted">No answer was heard.</span>}</p>
+        </div>
+      ))}
       {s.keyphrases.length > 0 && (
         <div style={{ marginTop: 16 }}>
           <h3 style={{ marginBottom: 8 }}>Key phrases</h3>
@@ -439,58 +446,97 @@ function TranscriptTab({ bundle, now, onSeek }: { bundle: SessionBundle; now: nu
 }
 
 
-function Answers({ answers }: { answers: AnswerBundle[] }) {
+function Level({ v, coach }: { v: number | null | undefined; coach: boolean }) {
+  if (v == null) return <b className="muted">–</b>;
+  const lvl = coachLevel(v);
+  return coach ? <b style={{ color: lvl.color }}>{lvl.word}</b> : <b style={{ color: scoreColor(v) }}>{v}</b>;
+}
+
+function contentDetail(key: string, part: any): string {
+  switch (key) {
+    case "relevance":
+      return `${part.covered.length} of ${part.terms.length} key ideas` + (part.missing.length ? ` · missing ${part.missing.slice(0, 3).map((w: string) => `“${w}”`).join(", ")}` : "");
+    case "evidence":
+      return `${part.count} number${part.count === 1 ? "" : "s"}, example${part.count === 1 ? "" : "s"} or source${part.count === 1 ? "" : "s"}`;
+    case "directness":
+      return part.total ? `${part.total} hedges · ${part.top.map(([h, c]: [string, number]) => `“${h}” ×${c}`).join(", ")}` : "No hedging";
+    case "clarity":
+      return `Sentences average ${part.avgWords} words`;
+    case "vocabulary":
+      return part.overused.length ? `Over-used: ${part.overused.map(([w, c]: [string, number]) => `“${w}” ×${c}`).join(", ")}` : "Varied wording";
+    case "takeaway":
+      return part.found ? `“${part.sentence}”` : "No clear closing point";
+    case "qa": {
+      const on = part.answers.filter((a: any) => a.onTopic).length;
+      return `${on} of ${part.answers.length} answer${part.answers.length === 1 ? "" : "s"} on topic`;
+    }
+    default:
+      return "";
+  }
+}
+
+function ContentCard({ s, coach, answers }: { s: Summary; coach: boolean; answers: AnswerBundle[] }) {
+  const c = s.content!;
   const [playing, setPlaying] = useState<string | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
-  const play = async (a: AnswerBundle) => {
+  const play = async (id: string) => {
     audio.current?.pause();
-    if (playing === a.sessionId) return setPlaying(null);
-    const name = a.files.includes("audio.wav") ? "audio.wav" : null;
-    if (!name) return;
-    audio.current = new Audio(await engine.fileUrl(a.sessionId, name, "audio/wav"));
+    if (playing === id) return setPlaying(null);
+    audio.current = new Audio(await engine.fileUrl(id, "audio.wav", "audio/wav"));
     audio.current.onended = () => setPlaying(null);
     void audio.current.play();
-    setPlaying(a.sessionId);
+    setPlaying(id);
   };
+  const qa = s.qaRound ?? [];
   return (
-    <section className="card answers">
-      <h3>Your Q&amp;A answers</h3>
-      {answers.map((a) => {
-        const s = a.summary;
-        const qa = s?.qa;
-        return (
-          <div className="answer" key={a.sessionId}>
-            <div className="answer-q">
-              <span>{a.question}</span>
-              <button className="icon-btn" onClick={() => void play(a)} disabled={!a.files.includes("audio.wav")}>
-                {playing === a.sessionId ? "■ Stop" : "▶ Listen"}
-              </button>
-            </div>
-            {!s ? (
-              <span className="muted small">Analyzing…</span>
-            ) : s.noSpeech ? (
-              <span className="small" style={{ color: "var(--bad)" }}>No answer was heard.</span>
-            ) : (
-              <div className="answer-stats">
-                <span className={`tag ${qa?.onTopic ? "good" : "bad"}`}>
-                  {qa?.onTopic ? "✓ On topic" : "✗ Drifted off topic"}
-                </span>
-                <span>{fmt(s.durationSec)}</span>
-                <span>{Math.round(s.pacing.meanWpm)} words/min</span>
-                <span>{s.fillers.total} {s.fillers.total === 1 ? "filler" : "fillers"}</span>
-                {s.scores.eyeContact != null && <span>{s.scores.eyeContact} eye contact</span>}
-                {s.fillers.events.length > 0 && s.fillers.events[0].t0 < 3 && <span className="muted">started with “{s.fillers.events[0].token}”</span>}
-              </div>
-            )}
-            {a.text && (
-              <details className="answer-text">
-                <summary>What you said</summary>
-                <p>{a.text}</p>
-              </details>
-            )}
+    <section className="card content-card">
+      <div className="row eng-head">
+        <h3>Content</h3>
+        {c.prompt && <span className="muted small content-prompt">“{c.prompt}”</span>}
+      </div>
+      <div className="content-parts">
+        {Object.entries(c.parts).map(([k, part]) => (
+          <div className="content-part" key={k}>
+            <span className="cp-name">{CONTENT_PARTS[k] ?? k}</span>
+            <Level v={part.score} coach={coach} />
+            <span className="cp-detail muted">{contentDetail(k, part)}</span>
           </div>
-        );
-      })}
+        ))}
+      </div>
+      {qa.length > 0 && (
+        <div className="qa-rows">
+          {qa.map((a) => {
+            const has = answers.find((x) => x.sessionId === a.sessionId)?.files.includes("audio.wav");
+            return (
+              <div className="qa-row" key={a.sessionId}>
+                <span className={`tag ${a.onTopic ? "good" : "bad"}`}>{a.onTopic ? "✓ On topic" : "✗ Off topic"}</span>
+                <span className="qa-row-q">{a.question}</span>
+                <span className="muted small">{Math.round(a.durationSec)} s · {a.words} words · {a.fillers} fillers</span>
+                <button className="icon-btn" onClick={() => void play(a.sessionId)} disabled={!has}>
+                  {playing === a.sessionId ? "■ Stop" : "▶ Listen"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DeliveryCard({ s, coach }: { s: Summary; coach: boolean }) {
+  return (
+    <section className="card delivery-card">
+      <h3>Delivery</h3>
+      <div className="delivery-grid">
+        {DELIVERY_METRICS.map((m) => (
+          <div className="delivery-item" key={m.key} title={m.what}>
+            <span className="cp-name">{m.title}</span>
+            <Level v={s.scores[m.key]} coach={coach} />
+            <span className="muted small">{m.measured(s)}</span>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

@@ -1,18 +1,15 @@
+// Speaking screen: only what helps while talking. Analytics come after.
 import { useEffect, useRef } from "react";
 import { cameraStream } from "../../lib/camera";
-import { zoneNames, type Zone } from "../../lib/types";
 import { live, useApp, useTicker } from "../../stores/app";
-import AudienceScene, { audienceStats } from "../audience/Audience";
+import AudienceScene from "../audience/Audience";
 import CueWord from "./Cue";
-import { stopSession } from "./session";
+import { stopSession, togglePause } from "./session";
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-const PACE_COLORS: Record<string, string> = {
-  drag: "var(--bad)", slow: "var(--warn)", optimal: "var(--good)", fast: "var(--warn)", rushing: "var(--bad)", pause: "var(--faint)",
-};
 
 export default function Live() {
-  const { settings, replayFrom, replayDuration, qa } = useApp();
+  const { settings, replayFrom, replayDuration, qa, paused } = useApp();
   const answering = qa?.answering && qa.questions ? qa : null;
   const question = answering ? answering.questions![answering.picked[answering.index]].question : null;
   const pipRef = useRef<HTMLVideoElement>(null);
@@ -26,21 +23,22 @@ export default function Live() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") void stopSession();
+      if (e.key === " " && !replayFrom) {
+        e.preventDefault();
+        void togglePause();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [replayFrom]);
 
   const tick = live.tick;
-  const pace = live.pace;
   const elapsed = tick?.t ?? 0;
   const E = tick?.E ?? 70;
-  const fillerCount = live.fillers.length;
-  const perMin = elapsed > 20 ? (fillerCount / elapsed) * 60 : null;
   const flash = live.lastFiller && performance.now() - live.lastFiller.at < 1400 ? live.lastFiller : null;
   const target = answering ? answering.seconds : settings.targetMinutes ? settings.targetMinutes * 60 : null;
-  const counts = audienceStats.counts;
   const left = answering ? Math.max(0, answering.seconds - elapsed) : null;
+  const eColor = E >= 65 ? "var(--good)" : E >= 35 ? "var(--warn)" : "var(--bad)";
 
   // An answer stops itself at its time limit.
   useEffect(() => {
@@ -48,47 +46,33 @@ export default function Live() {
   }, [left]);
 
   return (
-    <div className="live">
-      <div className="live-top">
-        <div className="stat">
-          <div className="label">{replayFrom ? "Replay" : answering ? "Time left" : "Time"}</div>
-          <div className="value" style={{ color: left !== null && left <= 10 ? "var(--bad)" : undefined }}>
-            {left !== null ? fmt(left) : fmt(elapsed)}
-          </div>
-          <div className="sub">
-            {replayDuration ? `of ${fmt(replayDuration)}` : answering ? `answer · ${answering.seconds} s` : target ? `target ${fmt(target)}` : " "}
-          </div>
+    <div className="live2">
+      <div className="live2-top">
+        <div className="live2-time" title={target ? `Target ${fmt(target)}` : undefined}>
+          <span className="label">{replayFrom ? "Replay" : answering ? "Time left" : "Time"}</span>
+          <b style={{ color: left !== null && left <= 10 ? "var(--bad)" : undefined }}>{left !== null ? fmt(left) : fmt(elapsed)}</b>
+          <span className="sub">{replayDuration ? `of ${fmt(replayDuration)}` : target && !answering ? `of ${fmt(target)}` : ""}</span>
         </div>
-        <div className="stat" style={{ minWidth: 260, flex: 1 }}>
-          <div className="label">Audience engagement</div>
-          <div className="row" style={{ gap: 14 }}>
-            <div className="value" style={{ color: E >= 65 ? "var(--good)" : E >= 35 ? "var(--warn)" : "var(--bad)" }}>
-              {E}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div className="engagement-bar">
-                <div className="needle" style={{ left: `calc(${E}% - 2px)` }} />
-              </div>
-              <div className="state-counts muted" style={{ marginTop: 6 }}>
-                <span>🙂 {counts.engaged} engaged</span>
-                <span>😐 {counts.neutral}</span>
-                <span>😴 {counts.bored} bored</span>
-                {counts.confused > 0 && <span>🤔 {counts.confused}</span>}
-              </div>
-            </div>
+        <div className="live2-eng" title="How engaged your audience is right now">
+          <span className="label">Audience</span>
+          <div className="engagement-bar">
+            <div className="needle" style={{ left: `calc(${E}% - 2px)` }} />
           </div>
+          <b style={{ color: eColor }}>{E}</b>
         </div>
-        <div className="stat">
-          <div className="label">Speed (words/min)</div>
-          <div className="value" style={{ color: PACE_COLORS[pace?.label ?? "pause"] }}>
-            {pace && pace.label !== "pause" ? Math.round(pace.wpmEma) : "–"}
-          </div>
-          <div className="sub">{pace ? (pace.label === "pause" ? "pausing" : pace.label) : "target 130–170"}</div>
+        <div className="live2-fill" title="Filler words so far">
+          <span className="label">Fillers</span>
+          <b>{live.fillers.length}</b>
         </div>
-        <div className="stat">
-          <div className="label">Filler words</div>
-          <div className="value" style={{ color: perMin != null && perMin > 4 ? "var(--bad)" : undefined }}>{fillerCount}</div>
-          <div className="sub">{perMin != null ? `${perMin.toFixed(1)} / min` : " "}</div>
+        <div className="live2-actions">
+          {!replayFrom && (
+            <button className="btn" onClick={() => void togglePause()} aria-pressed={paused}>
+              {paused ? "▶ Resume" : "❚❚ Pause"}
+            </button>
+          )}
+          <button className="btn primary" onClick={() => void stopSession()}>
+            {answering ? "■ Finish answer" : "■ Finish"}
+          </button>
         </div>
       </div>
 
@@ -99,17 +83,23 @@ export default function Live() {
             <span>{question}</span>
           </div>
         )}
-        <AudienceScene size={settings.audienceSize} />
-        {flash && (
+        <AudienceScene size={15} />
+        {flash && !paused && (
           <div className="filler-flash" key={flash.at} style={question ? { top: 96 } : undefined}>
             “{flash.token}”
           </div>
         )}
-        {settings.difficulty === "coach" && <CueWord />}
+        {settings.difficulty === "coach" && !paused && <CueWord />}
+        {paused && (
+          <div className="paused-overlay">
+            <b>Paused</b>
+            <span className="muted">Press Space or Resume when you're ready.</span>
+          </div>
+        )}
         {replayFrom && (
           <div className="replay-banner">
             <span className="pill warn">
-              <span className="dot" /> Replay Mode: recorded audio and gaze through the live pipeline
+              <span className="dot" /> Replay
             </span>
           </div>
         )}
@@ -120,98 +110,11 @@ export default function Live() {
         )}
       </div>
 
-      <aside className="side">
-        <div>
-          <h3 style={{ marginBottom: 8 }}>Where you're looking</h3>
-          <ZoneMap />
-        </div>
-        <div>
-          <h3 style={{ marginBottom: 4 }}>What's losing the audience</h3>
-          <p className="muted small" style={{ margin: "0 0 8px" }}>Longer, redder bars hurt engagement more.</p>
-          <Components />
-        </div>
-        <div>
-          <h3 style={{ marginBottom: 8 }}>Mic level</h3>
-          <div className="meter">
-            <div style={{ width: `${Math.max(0, Math.min(100, ((tick?.levelDb ?? -90) + 60) * 1.8))}%` }} />
-          </div>
-        </div>
-        <p className="muted small">
-          Tip: look at the side of the room that's drifting. Its audience members will perk up.
-        </p>
-      </aside>
-
-      <div className="caption">
+      <div className="caption live2-caption">
         <span>
           {live.finals.slice(-3).join(" ")} <span className="partial">{live.partial}</span>
         </span>
       </div>
-      <div className="stop-bar">
-        <button className="btn primary big" style={{ width: "100%" }} onClick={() => void stopSession()}>
-          {answering ? "■ Finish answer" : "■ Finish speech"}
-        </button>
-      </div>
     </div>
-  );
-}
-
-function ZoneMap() {
-  const notes = useApp((st) => st.settings.notes);
-  const names = zoneNames(notes);
-  const g = live.gaze;
-  const hist = live.gazeHistory;
-  const counts: Record<string, number> = { L: 0, C: 0, R: 0, N: 0, X: 0 };
-  for (const h of hist) counts[h.zone] = (counts[h.zone] ?? 0) + 1;
-  const total = hist.length || 1;
-  const cell = (z: Zone, cls = "") => (
-    <div
-      className={`zone-cell ${cls} ${g?.zone === z ? "on" : ""}`}
-      style={{ color: `var(--zone-${z})` }}
-      title={names[z]}
-    >
-      <b>{Math.round((100 * counts[z]) / total)}%</b>
-      <span className="small">{names[z]}</span>
-    </div>
-  );
-  return (
-    <div className="zone-map">
-      {cell("L")}
-      {cell("C")}
-      {cell("R")}
-      {cell("N", "notes")}
-      <div className="muted small" style={{ gridColumn: "1 / -1" }}>
-        {g?.face === false ? "Face not visible" : `Away ${Math.round((100 * counts.X) / total)}%`}
-      </div>
-    </div>
-  );
-}
-
-function Components() {
-  const c = live.tick?.c;
-  const rows: [string, number | null | undefined, string][] = [
-    ["Filler words", c?.filler, "How often you said um, uh, like… in the last 30 seconds"],
-    ["Flat voice", c?.monotony, "How little your pitch and volume changed in the last 10 seconds"],
-    ["Eye contact", c?.gaze, "Time away from the audience, or only looking at one part of the room (last 10 s)"],
-    ["Speed", c?.pace, "How far your speed is from a comfortable 150 words per minute"],
-  ];
-  if (c?.silence != null) rows.push(["Long silence", c.silence, "You've been quiet for a while"]);
-  return (
-    <div className="components">
-      {rows.map(([name, v, tip]) => (
-        <Row key={name} name={name} v={v} tip={tip} />
-      ))}
-    </div>
-  );
-}
-
-function Row({ name, v, tip }: { name: string; v: number | null | undefined; tip: string }) {
-  return (
-    <>
-      <span title={tip}>{name}</span>
-      <div className="bar">
-        <div style={{ width: `${(v ?? 0) * 100}%`, background: v == null ? "var(--faint)" : v > 0.6 ? "var(--bad)" : v > 0.35 ? "var(--warn)" : "var(--good)" }} />
-      </div>
-      <span className="muted mono">{v == null ? "–" : Math.round(v * 100)}</span>
-    </>
   );
 }

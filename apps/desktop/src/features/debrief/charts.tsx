@@ -183,20 +183,31 @@ export function GazeHeatmap({ g }: { g: NonNullable<Summary["gaze"]> }) {
     }
     const X = (yaw: number) => ((yaw - y0) / (y1 - y0)) * W;
     const Y = (pitch: number) => H - ((pitch - p0) / (p1 - p0)) * H;
+    // Draw the lines where the classifier actually split the zones (the speaker's calibration),
+    // so the picture and the percentages always agree.
+    const b = g.boundaries ?? { leftCenter: -12, centerRight: 12, down: -15 };
+    const camera = g.mode === "camera";
     ctx.strokeStyle = "#ffffff40";
     ctx.setLineDash([6, 6]);
     ctx.beginPath();
-    ctx.moveTo(X(-12), 0); ctx.lineTo(X(-12), Y(-15));
-    ctx.moveTo(X(12), 0); ctx.lineTo(X(12), Y(-15));
-    ctx.moveTo(0, Y(-15)); ctx.lineTo(W, Y(-15));
+    if (!camera) {
+      ctx.moveTo(X(b.leftCenter), 0); ctx.lineTo(X(b.leftCenter), Y(b.down));
+      ctx.moveTo(X(b.centerRight), 0); ctx.lineTo(X(b.centerRight), Y(b.down));
+    }
+    ctx.moveTo(0, Y(b.down)); ctx.lineTo(W, Y(b.down));
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = "#ffffffaa";
     ctx.font = "600 13px system-ui";
     ctx.textAlign = "center";
-    ctx.fillText(`LEFT ${g.zonePct.L}%`, X(-26), 22);
-    ctx.fillText(`CENTER ${g.zonePct.C}%`, X(0), 22);
-    ctx.fillText(`RIGHT ${g.zonePct.R}%`, X(26), 22);
+    const mid = (a: number, c: number) => (X(a) + X(c)) / 2;
+    if (camera) {
+      ctx.fillText(`EYE CONTACT ${(g.zonePct.L + g.zonePct.C + g.zonePct.R).toFixed(1)}%`, W / 2, 22);
+    } else {
+      ctx.fillText(`LEFT ${g.zonePct.L}%`, Math.max(40, mid(y0, b.leftCenter)), 22);
+      ctx.fillText(`CENTER ${g.zonePct.C}%`, mid(b.leftCenter, b.centerRight), 22);
+      ctx.fillText(`RIGHT ${g.zonePct.R}%`, Math.min(W - 40, mid(b.centerRight, y1)), 22);
+    }
     ctx.fillText(`${g.notesMode === false ? "LOOKING DOWN" : "NOTES / SLIDES"} ${g.zonePct.N}%`, W / 2, H - 14);
   }, [g]);
   return <canvas ref={ref} style={{ width: "100%", maxWidth: 640, display: "block", margin: "0 auto", borderRadius: 12, border: "1px solid var(--line)" }} />;
@@ -211,8 +222,27 @@ function heat(v: number): string {
   return `rgba(${c[0]},${c[1]},${c[2]},${0.35 + 0.65 * v})`;
 }
 
-export function ZoneBars({ pct, notes = true }: { pct: Record<Zone, number>; notes?: boolean }) {
+export function ZoneBars({ pct, notes = true, camera = false }: { pct: Record<Zone, number>; notes?: boolean; camera?: boolean }) {
   const names: Record<Zone, string> = { L: "Left audience", C: "Center audience", R: "Right audience", N: notes ? "Notes / slides" : "Looking down", X: "Away / no face" };
+  if (camera) {
+    const at = Math.round((pct.L + pct.C + pct.R) * 10) / 10;
+    const rows: [string, number, string][] = [["Looking at camera", at, ZONE_COLOR.C], [names.N, pct.N, ZONE_COLOR.N], [names.X, pct.X, ZONE_COLOR.X]];
+    return (
+      <div className="grid" style={{ gap: 8 }}>
+        {rows.map(([name, v, color]) => (
+          <div key={name}>
+            <div className="row small" style={{ justifyContent: "space-between" }}>
+              <span>{name}</span>
+              <span className="mono">{v}%</span>
+            </div>
+            <div className="progress">
+              <div style={{ width: `${v}%`, background: color }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="grid" style={{ gap: 8 }}>
       {(["L", "C", "R", "N", "X"] as Zone[]).map((z) => (
@@ -266,7 +296,8 @@ const fmtT = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).
 export function engagementHeadline(e: NonNullable<Summary["engagement"]>): string {
   const E = e.series.E;
   const engaged = e.engagedPct ?? (E.length ? Math.round((100 * E.filter((v) => v >= 65).length) / E.length) : 0);
-  const lowT = e.dips?.length ? e.dips.reduce((a, b) => (b.E < a.E ? b : a)).t : e.series.t[E.indexOf(Math.min(...E))];
+  // only name a lowest point when there was a real dip (the start of a talk is not one)
+  const lowT = e.dips?.length ? e.dips.reduce((a, b) => (b.E < a.E ? b : a)).t : null;
   return `Audience engaged ${Math.round(engaged)}% of the time${lowT != null ? ` · lowest at ${fmtT(lowT)}` : ""}`;
 }
 

@@ -15,6 +15,7 @@ export interface CueInput {
   zoneHeldSec: number; // how long the current zone has lasted
   sideShare: { L: number; R: number; samples: number }; // audience-zone shares over the last 15 s
   notes: boolean;
+  camera?: boolean; // Direct camera mode: no left/right sweeping
 }
 
 export type Cue = { text: string; tone: "warn" | "good" };
@@ -26,9 +27,9 @@ export function pickCue(c: CueInput): Cue | null {
   if (c.wpm !== null && c.wpm > 175) return { text: "Slow down", tone: "warn" };
   if (c.wpm !== null && c.wpm < 110) return { text: "Speed up", tone: "warn" };
   if (c.face && c.zone === "N" && c.zoneHeldSec > (c.notes ? 3 : 1.5)) return { text: "Look up", tone: "warn" };
-  if (c.face && c.zone === "X" && c.zoneHeldSec > 2) return { text: "Eye contact", tone: "warn" };
+  if (c.face && c.zone === "X" && c.zoneHeldSec > 2) return { text: c.camera ? "Look at the camera" : "Eye contact", tone: "warn" };
   if (!c.face && c.zoneHeldSec > 3) return { text: "Face the room", tone: "warn" };
-  if (c.sideShare.samples > 200) {
+  if (!c.camera && c.sideShare.samples > 200) {
     if (c.sideShare.L < 0.05) return { text: "Look left", tone: "warn" };
     if (c.sideShare.R < 0.05) return { text: "Look right", tone: "warn" };
   }
@@ -42,6 +43,7 @@ const HOLD_SEC = 2.5;
 export default function CueWord() {
   useTicker(5);
   const notes = useApp((s) => s.settings.notes);
+  const camera = useApp((s) => s.settings.gazeMode === "camera");
   const answering = useApp((s) => !!s.qa?.answering);
   const shown = useRef<{ cue: Cue | null; since: number }>({ cue: null, since: 0 });
   const zoneRun = useRef<{ zone: string | null; face: boolean; since: number }>({ zone: null, face: true, since: 0 });
@@ -63,7 +65,8 @@ export default function CueWord() {
     now,
     speaking: !!tick?.speaking,
     silenceSec: tick?.c.silence != null ? 3 + tick.c.silence * 10 : 0, // engine: (silence - 3 s) / 10
-    wpm: pace && pace.label !== "pause" && audioNow > 8 ? pace.wpmEma : null,
+    // the first readings include the silence before you started talking
+    wpm: pace && pace.label !== "pause" && audioNow > 15 ? pace.wpmEma : null,
     recentFillers: live.fillers.filter((f) => f.t0 > audioNow - 12).length,
     lastFillerAgo: live.lastFiller ? (performance.now() - live.lastFiller.at) / 1000 : null,
     monotony: tick?.c.monotony ?? null,
@@ -72,6 +75,7 @@ export default function CueWord() {
     zoneHeldSec: now - zoneRun.current.since,
     sideShare: { L: share("L"), R: share("R"), samples: aud.length },
     notes: answering ? false : notes,
+    camera,
   });
 
   // Hold each cue long enough to read, unless a warning replaces a "Good".

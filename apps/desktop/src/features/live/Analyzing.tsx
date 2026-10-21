@@ -11,6 +11,7 @@ const STAGES: [string, string][] = [
   ["keyphrases", "Extracting key phrases"],
   ["scoring", "Scoring"],
   ["tts", "Recording your spoken debrief"],
+  ["qa", "Adding your Q&A answers"],
 ];
 
 export default function Analyzing() {

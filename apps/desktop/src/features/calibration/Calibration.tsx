@@ -18,7 +18,14 @@ const SETTLE_MS = 700;
 export default function Calibration() {
   const { set, go, settings } = useApp();
   // Without notes there is no notes target: the downward zone keeps its default position.
-  const steps = useMemo(() => (settings.notes ? STEPS : STEPS.filter((st) => st.zone !== "N")), [settings.notes]);
+  // Direct camera: only "at the lens" (and "down" with notes). No notes: no notes target.
+  const steps = useMemo(() => {
+    const base = settings.gazeMode === "camera"
+      ? STEPS.filter((st) => st.zone === "C" || st.zone === "N").map((st) =>
+          st.zone === "C" ? { ...st, label: "Camera", hint: "Look straight into the camera lens.", y: "6%" } : st)
+      : STEPS;
+    return settings.notes ? base : base.filter((st) => st.zone !== "N");
+  }, [settings.notes, settings.gazeMode]);
   const [step, setStep] = useState(-1);
   const [progress, setProgress] = useState(0);
   const samples = useRef<Record<Z, [number, number][]>>({ L: [], C: [], R: [], N: [] });

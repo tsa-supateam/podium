@@ -175,7 +175,9 @@ class Server:
         sdir = storage.session_path(sid)
         extra = {"targetDurationSec": d.get("targetDurationSec"), "audienceSize": d.get("audienceSize", 15),
                  "notes": bool(d.get("notes", True)),
-                 "difficulty": "judge" if d.get("difficulty") == "judge" else "coach"}
+                 "difficulty": "judge" if d.get("difficulty") in ("judge", "assessment") else "coach",
+                 "gazeMode": "camera" if d.get("gazeMode") == "camera" else "room",
+                 "prompt": str(d.get("prompt") or "")[:400]}
         title = d.get("title") or "Practice run"
         replay_from = d.get("replaySessionId")
         mode = "replay" if replay_from else d.get("mode", "practice")
@@ -262,8 +264,28 @@ class Server:
         self.analyses.pop(sid, None)
         if code == 0:
             await self.send({"type": "analysis.done", "data": {"sessionId": sid}})
+            await self._maybe_combine(sid)
         else:
             await self.send({"type": "analysis.failed", "data": {"sessionId": sid, "message": err[-800:]}})
+
+    async def _maybe_combine(self, sid: str) -> None:
+        """When a speech and all its Q&A answers are analyzed, merge them into one report."""
+        from ..deep.finalize import combine
+
+        meta = json.loads((storage.session_path(sid) / "session.json").read_text())
+        parent = meta.get("parentSessionId") if meta.get("mode") == "qa" else sid
+        if not parent:
+            return
+        pmeta = json.loads((storage.session_path(parent) / "session.json").read_text())
+        if not pmeta.get("answers") or pmeta.get("status") != "analyzed":
+            return
+        try:
+            done = await asyncio.get_running_loop().run_in_executor(None, combine, storage.session_path(parent))
+        except Exception:
+            log.exception("combine failed")
+            return
+        if done:
+            await self.send({"type": "session.updated", "data": {"sessionId": parent}})
 
     def _link_answer(self, parent: str, child: str, question: str) -> None:
         pf = storage.session_path(parent) / "session.json"

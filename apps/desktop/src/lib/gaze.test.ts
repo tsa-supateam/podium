@@ -101,3 +101,15 @@ describe("OneEuro", () => {
     expect(Math.abs(out - 10)).toBeLessThan(0.6);
   });
 });
+
+describe("calibration guard", () => {
+  it("pushes side zones that were measured too close to center", async () => {
+    const { fitZoneModel } = await import("./gaze");
+    const pts = (x: number, y: number) => Array.from({ length: 20 }, () => [x, y] as [number, number]);
+    // real calibration from 2026-10-20: left +12, center +22.7, right +27.6
+    const m = fitZoneModel({ L: pts(12, -6.7), C: pts(22.7, -5.9), R: pts(27.6, -6.5), N: [] });
+    expect(m.L.mu[0]).toBeCloseTo(12);
+    expect(m.R.mu[0]).toBeCloseTo(32.7);
+    expect(m.N.mu[1]).toBeLessThanOrEqual(-15.9); // default "down" offset kept relative to center
+  });
+});

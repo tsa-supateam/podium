@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cameraStream, startCamera, tracker } from "../../lib/camera";
 import { listMics, micLevelDb, startMic } from "../../lib/mic";
+import { CATEGORIES, randomPrompt } from "../../lib/prompts";
 import { zoneNames } from "../../lib/types";
 import { live, useApp, useTicker } from "../../stores/app";
 import { startSession } from "../live/session";
@@ -51,11 +52,15 @@ export default function Setup() {
     }
   };
 
+  const camera = settings.gazeMode === "camera";
   return (
     <div className="page">
       <h1 style={{ marginBottom: 18 }}>Set up your practice run</h1>
+
+      <PromptPicker />
+
       <div className="setup">
-        <div className="grid">
+        <div className="grid" style={{ alignContent: "start" }}>
           <div className="preview">
             <video ref={videoRef} autoPlay muted playsInline />
             <div className="badge">
@@ -65,13 +70,13 @@ export default function Setup() {
             </div>
           </div>
           {camErr && <p style={{ color: "var(--bad)" }}>Camera unavailable: {camErr}. Eye contact will not be scored.</p>}
-          <div className="card">
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <h3>Gaze readout</h3>
+          <details className="card readout">
+            <summary className="row" style={{ justifyContent: "space-between" }}>
+              <span className="muted small">Gaze readout</span>
               <span className="muted small mono">
                 {tracker.fps.toFixed(0)} fps · {tracker.inferMs.toFixed(1)} ms/frame
               </span>
-            </div>
+            </summary>
             <div className="kv mono" style={{ marginTop: 10 }}>
               <span>Head yaw / pitch</span>
               <span>{g?.face ? `${g.yaw.toFixed(0)}° / ${g.pitch.toFixed(0)}°` : "–"}</span>
@@ -89,51 +94,47 @@ export default function Setup() {
               />
               Flip left/right (use if turning to your right shows a negative yaw)
             </label>
+          </details>
+          <div className="card">
+            <h3 style={{ marginBottom: 10 }}>Checklist</h3>
+            <ul className="checklist">
+              <Check ok={camOk} label="Camera on" />
+              <Check ok={faceOk} label="Face visible and well lit" />
+              <Check ok={!micErr && !micDead && level > -95} label="Microphone picking up sound (say something)" />
+              <Check ok={calibrated} label="Gaze calibrated (recommended)" />
+            </ul>
           </div>
         </div>
 
         <div className="grid" style={{ alignContent: "start" }}>
           <div className="card grid">
-            <div className="field">
-              <label>Title</label>
-              <input value={settings.title} onChange={(e) => setSettings({ title: e.target.value })} />
-            </div>
-            <div className="field">
-              <label>Mode</label>
-              <div className="segmented" role="radiogroup" aria-label="Mode">
-                <button role="radio" aria-checked={settings.difficulty === "coach"} className={settings.difficulty === "coach" ? "on" : ""}
-                  onClick={() => setSettings({ difficulty: "coach" })}>
-                  Coach
-                </button>
-                <button role="radio" aria-checked={settings.difficulty === "judge"} className={settings.difficulty === "judge" ? "on" : ""}
-                  onClick={() => setSettings({ difficulty: "judge" })}>
-                  Judge
-                </button>
-              </div>
-              <span className="muted small">
-                {settings.difficulty === "coach"
-                  ? "Practice: live tips, a friendlier audience, and encouraging results."
-                  : "Test conditions: no tips, a strict audience, and scores out of 100."}
-              </span>
-            </div>
-            <div className="field">
-              <label>Notes</label>
-              <div className="segmented" role="radiogroup" aria-label="Notes">
-                <button role="radio" aria-checked={settings.notes} className={settings.notes ? "on" : ""}
-                  onClick={() => setSettings({ notes: true })}>
-                  Using notes or slides
-                </button>
-                <button role="radio" aria-checked={!settings.notes} className={!settings.notes ? "on" : ""}
-                  onClick={() => setSettings({ notes: false })}>
-                  No notes
-                </button>
-              </div>
-              <span className="muted small">
-                {settings.notes
-                  ? "Glancing down at notes is expected. Looks over 5 s count against you."
-                  : "Looking down counts as looking away. Target: 85% eye contact."}
-              </span>
-            </div>
+            <Toggle
+              label="Mode"
+              value={settings.difficulty}
+              options={[["coach", "Practice"], ["judge", "Assessment"]]}
+              onChange={(v) => setSettings({ difficulty: v as "coach" | "judge" })}
+              hint={settings.difficulty === "coach"
+                ? "Live tips, a friendlier audience, and encouraging results."
+                : "Test conditions: no tips, a strict audience, and scores out of 100."}
+            />
+            <Toggle
+              label="Look at"
+              value={settings.gazeMode}
+              options={[["room", "Simulated audience"], ["camera", "Direct camera"]]}
+              onChange={(v) => setSettings({ gazeMode: v as "room" | "camera" })}
+              hint={camera
+                ? "Like a video interview: eye contact means looking up at the camera."
+                : "Like a room: sweep your eyes across the left, center and right of the audience."}
+            />
+            <Toggle
+              label="Notes"
+              value={settings.notes ? "yes" : "no"}
+              options={[["yes", "Using notes or slides"], ["no", "No notes"]]}
+              onChange={(v) => setSettings({ notes: v === "yes" })}
+              hint={settings.notes
+                ? "Glancing down at notes is expected. Looks over 5 s count against you."
+                : "Looking down counts as looking away. Target: 85% eye contact."}
+            />
             <div className="row">
               <div className="field" style={{ flex: 1 }}>
                 <label>Target length (minutes)</label>
@@ -144,14 +145,6 @@ export default function Setup() {
                   value={settings.targetMinutes ?? ""}
                   onChange={(e) => setSettings({ targetMinutes: e.target.value ? Number(e.target.value) : null })}
                 />
-              </div>
-              <div className="field" style={{ flex: 1 }}>
-                <label>Audience size</label>
-                <select value={settings.audienceSize} onChange={(e) => setSettings({ audienceSize: Number(e.target.value) })}>
-                  {[9, 12, 15, 18].map((n) => (
-                    <option key={n}>{n}</option>
-                  ))}
-                </select>
               </div>
             </div>
             <div className="field">
@@ -184,34 +177,86 @@ export default function Setup() {
             </label>
           </div>
 
-          <div className="card">
-            <h3 style={{ marginBottom: 10 }}>Checklist</h3>
-            <ul className="checklist">
-              <Check ok={camOk} label="Camera on" />
-              <Check ok={faceOk} label="Face visible and well lit" />
-              <Check ok={!micErr && !micDead && level > -95} label="Microphone picking up sound (say something)" />
-              <Check ok={calibrated} label="Gaze calibrated for this room (recommended)" />
-            </ul>
-          </div>
-
           <div className="row">
             <button className="btn big" onClick={() => go("calibrate")} disabled={!faceOk}>
-              {calibrated ? "Recalibrate" : "Calibrate gaze (12 s)"}
+              {calibrated ? "Recalibrate" : camera ? "Calibrate gaze (6 s)" : "Calibrate gaze (12 s)"}
             </button>
             <span className="spacer" />
             <button className="btn primary big" onClick={begin} disabled={starting}>
               {starting ? "Starting…" : "Start speaking"}
             </button>
           </div>
-          {!calibrated && (
-            <p className="muted small">
-              Without calibration, Podium uses default angles: 12° left or right of center counts as the side
-              audience, and looking down 15° counts as {settings.notes ? "notes" : "looking down"}.
-            </p>
-          )}
         </div>
       </div>
     </div>
+  );
+}
+
+function Toggle({ label, value, options, onChange, hint }: {
+  label: string;
+  value: string;
+  options: [string, string][];
+  onChange: (v: string) => void;
+  hint: string;
+}) {
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <div className="segmented" role="radiogroup" aria-label={label}>
+        {options.map(([v, text]) => (
+          <button key={v} role="radio" aria-checked={value === v} className={value === v ? "on" : ""} onClick={() => onChange(v)}>
+            {text}
+          </button>
+        ))}
+      </div>
+      <span className="muted small">{hint}</span>
+    </div>
+  );
+}
+
+function PromptPicker() {
+  const { settings, setSettings } = useApp();
+  const roll = () => setSettings({ prompt: randomPrompt(settings.promptCategory, settings.prompt).text });
+  useEffect(() => {
+    if (!settings.prompt) roll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <section className="card prompt-card">
+      <div className="row prompt-head">
+        <h3>Your topic</h3>
+        <span className="spacer" />
+        <select
+          value={settings.promptCategory ?? ""}
+          onChange={(e) => {
+            const cat = e.target.value || null;
+            setSettings({ promptCategory: cat, prompt: randomPrompt(cat).text });
+          }}
+          aria-label="Prompt category"
+        >
+          <option value="">All categories</option>
+          {CATEGORIES.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+        <button className="btn" onClick={roll} title="Pick another random prompt">🎲 New prompt</button>
+      </div>
+      <textarea
+        className="prompt-input"
+        value={settings.prompt}
+        onChange={(e) => setSettings({ prompt: e.target.value })}
+        placeholder="Type your own topic, or leave empty for free talk"
+        rows={2}
+      />
+      <span className="muted small">
+        {settings.prompt.trim()
+          ? "Edit it or type your own. Your content is checked against this topic."
+          : "Free talk: no topic, so content is judged on support, clarity and takeaway only."}{" "}
+        {settings.prompt.trim() && (
+          <button className="link-btn" onClick={() => setSettings({ prompt: "" })}>Free talk instead</button>
+        )}
+      </span>
+    </section>
   );
 }
 

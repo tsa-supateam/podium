@@ -169,7 +169,30 @@ export function fitGaussian(points: [number, number][], minVar = 9): Gaussian2 {
 export function fitZoneModel(samples: Record<Exclude<Zone, "X">, [number, number][]>): ZoneModel {
   const m = { ...DEFAULT_ZONE_MODEL };
   for (const z of ZONE_KEYS) if (samples[z]?.length >= 10) m[z] = fitGaussian(samples[z]);
-  return m;
+  // Zones not calibrated (e.g. left/right in Direct camera mode) stay at their default offsets
+  // from the calibrated center.
+  const c = m.C.mu;
+  for (const z of ZONE_KEYS) {
+    if (z !== "C" && !(samples[z]?.length >= 10)) {
+      const d = DEFAULT_ZONE_MODEL[z].mu, dc = DEFAULT_ZONE_MODEL.C.mu;
+      m[z] = { ...m[z], mu: [c[0] + d[0] - dc[0], c[1] + d[1] - dc[1]] };
+    }
+  }
+  return sanitizeZoneModel(m);
+}
+
+export const MIN_SIDE_SEP = 10;
+
+/** A side zone measured too close to center (eyes barely moved during calibration) would make a tiny
+ *  drift count as "left" or "right". Push it out. Mirrors engine scoring.zone_centers. */
+export function sanitizeZoneModel(m: ZoneModel): ZoneModel {
+  const [cx, cy] = m.C.mu;
+  return {
+    ...m,
+    L: { ...m.L, mu: [Math.min(m.L.mu[0], cx - MIN_SIDE_SEP), m.L.mu[1]] },
+    R: { ...m.R, mu: [Math.max(m.R.mu[0], cx + MIN_SIDE_SEP), m.R.mu[1]] },
+    N: { ...m.N, mu: [m.N.mu[0], Math.min(m.N.mu[1], cy - MIN_SIDE_SEP)] },
+  };
 }
 
 /** Online forward filter of a "sticky" HMM: glances shorter than ~150 ms don't flip the zone. */

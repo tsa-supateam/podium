@@ -13,7 +13,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .. import config as cfgmod
-from .. import tts
 from ..nlp import debrief, keyphrases
 from ..nlp.quick import topic_coverage
 from ..nlp.text import pos_tag, sentences
@@ -22,6 +21,7 @@ from ..realtime.pace import Word
 from ..storage import SCHEMA_VERSION, Index, read_ndjson, write_json
 from . import engagement as engagement_mod
 from . import prosody, scoring, segmentation
+from .finalize import answer_inputs, finalize
 from .transcribe import transcribe
 
 Progress = Callable[[str, float], None]
@@ -132,7 +132,8 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
     # 8. gaze + engagement + scores
     progress("scoring", 0.0)
     notes = bool(meta.get("notes", True))
-    gaze = scoring.gaze_summary(read_ndjson(tel / "gaze.ndjson"), duration, notes)
+    cal = json.loads((session_dir / "calibration.json").read_text()) if (session_dir / "calibration.json").exists() else None
+    gaze = scoring.gaze_summary(read_ndjson(tel / "gaze.ndjson"), duration, notes, meta.get("gazeMode", "room"), cal)
     eng = read_ndjson(tel / "engagement.ndjson")
     engagement = engagement_mod.summarize(eng)
     if engagement:
@@ -155,6 +156,7 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
         "ratio": round(len(fillers) / max(n_words, 1), 3), "byToken": by_token, "burstiness": burst,
         "clusters": clusters, "events": [e.as_dict() for e in fillers],
     }
+    # speech-only delivery scores; finalize() turns them into Content / Structure / Engagement
     scores = {
         "pacing": scoring.score_pace(pacing, pc["band"]),
         "fillers": scoring.score_fillers(fillers_out["perMinute"]),
@@ -166,7 +168,6 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
     if no_speech:
         # Nothing was said (or the mic delivered silence): speech scores would be meaningless.
         scores.update(pacing=None, fillers=None, vocalVariety=None, structure=None)
-    scores["overall"], scores["grade"] = scoring.overall(scores)
 
     highlights = (
         [{"t": c["t0"], "kind": "filler_cluster", "severity": min(1.0, 0.2 * c["count"])} for c in clusters]
@@ -185,22 +186,18 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
         "highlights": sorted(highlights, key=lambda h: h["t"]),
     }
 
-    # 9. debrief script + TTS
     summary["noSpeech"] = no_speech
-    deb = debrief.no_speech(summary) if no_speech else debrief.build(summary, keyphrase_at)
-    summary["debrief"] = deb
-    (session_dir / "debrief.txt").write_text(deb["text"] + "\n")
+    summary["prompt"] = meta.get("prompt", "")
     if meta.get("mode") == "qa":
-        # An on-the-spot answer: no spoken debrief, but check it stayed on the question's topic.
+        # An on-the-spot answer: check it stayed on the question's topic.
         summary["qa"] = topic_coverage(meta.get("question", ""), tr.text)
-        with_tts = False
+    write_json(session_dir / "summary_speech.json", summary)  # speech-only base for combine()
+
+    # 9. content, headline scores, tips and spoken debrief (with any Q&A answers analyzed so far)
     progress("tts", 0.0)
-    if with_tts and tts.available():
-        try:
-            tts.synthesize_many([(deb["text"], session_dir / "debrief.wav")])
-            summary["debriefAudio"] = "debrief.wav"
-        except Exception as e:  # noqa: BLE001
-            summary["debriefAudioError"] = str(e)
+    latest = json.loads((session_dir / "session.json").read_text())
+    summary = finalize(session_dir, summary, words, {**meta, **latest}, answer_inputs(latest), cfg, with_tts)
+    scores = summary["scores"]
 
     summary["analysisSec"] = round(time.perf_counter() - t_start, 2)
     write_json(session_dir / "summary.json", summary)

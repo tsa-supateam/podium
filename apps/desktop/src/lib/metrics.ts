@@ -1,7 +1,7 @@
 // Plain-language names and explanations for every score. One source of truth for all screens.
 import type { Scores, Summary } from "./types";
 
-export type MetricKey = "pacing" | "fillers" | "vocalVariety" | "eyeContact" | "structure";
+export type MetricKey = "pacing" | "fillers" | "vocalVariety" | "eyeContact" | "structure" | "content" | "engagement";
 
 export interface MetricInfo {
   key: MetricKey;
@@ -112,11 +112,12 @@ export function clusteringWord(b: number, total: number): string {
 }
 
 export function scoreOf(scores: Scores, key: MetricKey): number | null {
-  return scores[key];
+  return scores[key] ?? null;
 }
 
 /** One-line strength for the takeaway card, e.g. "Kept fillers to 0.5/min". */
-export function strengthLine(metric: string, s: Summary): string {
+export function strengthLine(metric: string, s: Summary, text = ""): string {
+  if (metric.startsWith("content")) return firstSentence(text);
   switch (metric) {
     case "eyeContact":
       return `${Math.round(s.gaze?.audiencePct ?? 0)}% eye contact with the audience`;
@@ -152,3 +153,49 @@ export function coachLevel(score: number): { stars: number; word: string; color:
   if (score >= 40) return { stars: 2, word: "Building", color: "var(--accent)" };
   return { stars: 1, word: "Warming up", color: "var(--info)" };
 }
+
+/** The three headline scores. Delivery details (speed, fillers, voice, eye contact) sit under Engagement. */
+export const TOP_METRICS: MetricInfo[] = [
+  {
+    key: "content",
+    title: "Content",
+    short: "Content",
+    what: "What you said: on the prompt, backed by evidence, direct and clear, with a takeaway, and solid Q&A answers.",
+    how: [
+      "On the prompt 25%: how many of the prompt's key ideas you covered (60% of them = full marks).",
+      "Evidence 20%: about one number, example or source every 40 seconds.",
+      "Directness 15%: hedges like “I think”, “maybe”, “kind of” per 100 words.",
+      "Clarity 15%: sentences of about 10 to 20 words.",
+      "Word variety 10%, takeaway 5%, Q&A answers 10% (on topic, long enough, answered directly).",
+      "Parts that don't apply (no prompt, no Q&A) are left out.",
+    ],
+    measured: (s) => (s.content?.score != null ? `${Object.keys(s.content.parts).length} things checked` : "Not enough speech"),
+  },
+  METRICS.find((m) => m.key === "structure")!,
+  {
+    key: "engagement",
+    title: "Engagement",
+    short: "Engagement",
+    what: "How you said it, and how your audience reacted: speed, filler words, voice and eye contact.",
+    how: [
+      "Half: the average of your speed, filler-word, voice and eye-contact scores (Delivery, below).",
+      "Half: the live audience's average engagement during your talk.",
+      "With a Q&A round, your answers count too, weighted by how long they lasted.",
+    ],
+    measured: (s) => (s.engagement ? `Audience average ${Math.round(s.engagement.meanE)}` : ""),
+  },
+];
+
+export const DELIVERY_METRICS: MetricInfo[] = METRICS.filter((m) => m.key !== "structure");
+
+export const OVERALL_HOW = "Overall = Content 35% + Structure 25% + Engagement 40%.";
+
+export const CONTENT_PARTS: Record<string, string> = {
+  relevance: "On the prompt",
+  evidence: "Evidence",
+  directness: "Directness",
+  clarity: "Clear sentences",
+  vocabulary: "Word variety",
+  takeaway: "Takeaway",
+  qa: "Q&A answers",
+};

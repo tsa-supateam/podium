@@ -18,8 +18,36 @@ PITCH_BINS = (-30.0, 20.0, 2.0)
 STARE_SEC = {True: 5.0, False: 2.5}
 
 
-def gaze_summary(gaze: list[dict], duration: float, notes: bool = True) -> dict | None:
-    """`notes`: the speaker had notes or slides. If False, zone N means "looking down", not "reading"."""
+DEFAULT_ZONES = {"L": [-25.0, 2.0], "C": [0.0, 2.0], "R": [25.0, 2.0], "N": [0.0, -25.0]}
+MIN_SIDE_SEP = 10.0  # degrees: a side zone closer to center than this was a weak calibration
+
+
+def zone_centers(calibration: dict | None) -> dict[str, list[float]]:
+    """Zone centers (yaw, pitch) the classifier used: calibrated if available, with weak calibrations
+    pushed apart the same way the app does (lib/gaze.ts sanitizeZoneModel)."""
+    m = {z: list(v) for z, v in DEFAULT_ZONES.items()}
+    if calibration and calibration.get("zoneModel"):
+        for z, g in calibration["zoneModel"].items():
+            if z in m:
+                m[z] = [float(g["mu"][0]), float(g["mu"][1])]
+    cx, cy = m["C"]
+    m["L"][0] = min(m["L"][0], cx - MIN_SIDE_SEP)
+    m["R"][0] = max(m["R"][0], cx + MIN_SIDE_SEP)
+    m["N"][1] = min(m["N"][1], cy - MIN_SIDE_SEP)
+    return m
+
+
+def zone_boundaries(centers: dict[str, list[float]]) -> dict[str, float]:
+    """Where the classifier switches zones (equal-variance Gaussians: halfway between centers)."""
+    return {"leftCenter": round((centers["L"][0] + centers["C"][0]) / 2, 1),
+            "centerRight": round((centers["C"][0] + centers["R"][0]) / 2, 1),
+            "down": round((centers["C"][1] + centers["N"][1]) / 2, 1)}
+
+
+def gaze_summary(gaze: list[dict], duration: float, notes: bool = True, mode: str = "room",
+                 calibration: dict | None = None) -> dict | None:
+    """`notes`: the speaker had notes or slides. If False, zone N means "looking down", not "reading".
+    `mode`: "room" (simulated audience left/center/right) or "camera" (eye contact = looking up at the camera)."""
     if len(gaze) < 30:
         return None
     gaze = sorted(gaze, key=lambda g: g["t"])
@@ -51,11 +79,15 @@ def gaze_summary(gaze: list[dict], duration: float, notes: bool = True) -> dict 
                 stares.append({"t0": round(float(run_start), 2), "t1": round(float(t), 2)})
             run_start = None
 
-    # heatmap (yaw, pitch) histogram, Gaussian-smoothed
+    # heatmap (yaw, pitch) histogram, Gaussian-smoothed, centered on the speaker's own center
+    centers = zone_centers(calibration)
+    cx, cy = centers["C"]
+    yaw_bins = (round(cx - 40, 1), round(cx + 40, 1), YAW_BINS[2])
+    pitch_bins = (round(cy - 30, 1), round(cy + 20, 1), PITCH_BINS[2])
     pts = np.array([(g.get("gYaw", g.get("yaw", 0)), g.get("gPitch", g.get("pitch", 0)))
                     for g in gaze if g.get("face", True) and ("gYaw" in g or "yaw" in g)], dtype=float).reshape(-1, 2)
-    yb = np.arange(YAW_BINS[0], YAW_BINS[1] + YAW_BINS[2], YAW_BINS[2])
-    pb = np.arange(PITCH_BINS[0], PITCH_BINS[1] + PITCH_BINS[2], PITCH_BINS[2])
+    yb = np.arange(yaw_bins[0], yaw_bins[1] + yaw_bins[2], yaw_bins[2])
+    pb = np.arange(pitch_bins[0], pitch_bins[1] + pitch_bins[2], pitch_bins[2])
     hist = np.zeros((len(pb) - 1, len(yb) - 1))
     if len(pts):
         hist, _, _ = np.histogram2d(pts[:, 1], pts[:, 0], bins=[pb, yb])
@@ -79,7 +111,9 @@ def gaze_summary(gaze: list[dict], duration: float, notes: bool = True) -> dict 
         "longestNotesStareSec": round(longest, 1),
         "notesStares": stares,
         "notesMode": notes,
-        "heatmap": {"yawBins": list(YAW_BINS), "pitchBins": list(PITCH_BINS),
+        "mode": mode,
+        "boundaries": zone_boundaries(centers),
+        "heatmap": {"yawBins": list(yaw_bins), "pitchBins": list(pitch_bins),
                     "rows": int(hist.shape[0]), "cols": int(hist.shape[1]), "u8": enc},
         "timeline": timeline,
     }
@@ -91,7 +125,9 @@ def score_eye(g: dict | None) -> int | None:
     notes = g.get("notesMode", True)
     target = 0.75 if notes else 0.85  # no notes: nothing to read, so expect more audience time
     aud_frac = g["audiencePct"] / 100
-    s = 100 * clip01(aud_frac / target) ** 0.7 * (0.7 + 0.3 * g["balanceEntropy"])
+    # camera mode: there is no room to sweep, so spreading attention left/right doesn't apply
+    spread = 1.0 if g.get("mode") == "camera" else (0.7 + 0.3 * g["balanceEntropy"])
+    s = 100 * clip01(aud_frac / target) ** 0.7 * spread
     s -= min(20, (2 if notes else 3) * len(g.get("notesStares", [])))
     return int(round(max(0.0, s)))
 
@@ -143,3 +179,26 @@ def overall(scores: dict[str, int | None]) -> tuple[int, str]:
     grade = next(g for cut, g in [(93, "A"), (90, "A-"), (87, "B+"), (83, "B"), (80, "B-"), (77, "C+"), (73, "C"),
                                   (70, "C-"), (60, "D"), (0, "F")] if s >= cut)
     return s, grade
+
+
+TOP_WEIGHTS = {"content": 0.35, "structure": 0.25, "engagement": 0.40}
+
+
+def top_level(delivery: dict, content: int | None, structure: int | None, audience_e: float | None,
+              no_speech: bool = False) -> dict:
+    """The three headline scores. Engagement = how the delivery (speed, fillers, voice, eye contact)
+    and the live audience's reaction averaged out; delivery details stay available underneath."""
+    if no_speech:
+        delivery = {k: (v if k == "eyeContact" else None) for k, v in delivery.items()}
+        content = structure = None
+    d_vals = [v for v in delivery.values() if v is not None]
+    d_avg = sum(d_vals) / len(d_vals) if d_vals else None
+    parts = [v for v in (d_avg, audience_e) if v is not None]
+    engagement = round(sum(parts) / len(parts)) if parts else None
+    top = {"content": content, "structure": structure, "engagement": engagement}
+    num = sum(TOP_WEIGHTS[k] * v for k, v in top.items() if v is not None)
+    den = sum(TOP_WEIGHTS[k] for k, v in top.items() if v is not None)
+    s = round(num / den) if den else 0
+    grade = next(g for cut, g in [(93, "A"), (90, "A-"), (87, "B+"), (83, "B"), (80, "B-"), (77, "C+"), (73, "C"),
+                                  (70, "C-"), (60, "D"), (0, "F")] if s >= cut)
+    return {**top, **delivery, "overall": s, "grade": grade}

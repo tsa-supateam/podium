@@ -73,6 +73,8 @@ export interface GazeSample {
 export interface Scores {
   overall: number;
   grade: string;
+  content?: number | null;
+  engagement?: number | null;
   pacing: number | null;
   fillers: number | null;
   vocalVariety: number | null;
@@ -130,6 +132,8 @@ export interface Summary {
     notesStares: { t0: number; t1: number }[];
     notesMode?: boolean;
     heatmap: { yawBins: number[]; pitchBins: number[]; rows: number; cols: number; u8: string };
+    mode?: "room" | "camera";
+    boundaries?: { leftCenter: number; centerRight: number; down: number };
     timeline: [number, Zone][];
   };
   engagement: null | {
@@ -171,6 +175,9 @@ export interface Summary {
   debriefAudio?: string;
   analysisSec: number;
   noSpeech?: boolean;
+  prompt?: string;
+  content?: { score: number | null; prompt: string; parts: Record<string, any> };
+  qaRound?: { sessionId: string; question: string; onTopic: boolean; mentioned: string[]; durationSec: number; wpm: number; fillers: number; words: number }[];
 }
 
 export interface Transcript {

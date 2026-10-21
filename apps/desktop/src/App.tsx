@@ -22,8 +22,13 @@ export async function openSession(sessionId: string, analyzeIfMissing = true): P
       await engine.request("session.analyze", { sessionId });
       st.set({ analysis: { stage: "transcribe", pct: 0, sessionId }, analysisError: null });
     }
-    st.set({ bundle, sessionId, screen: bundle.summary ? "debrief" : "analyzing" });
-    return !!bundle.summary;
+    // A speech with Q&A answers is one report: wait until the answers have been merged in.
+    const linked = bundle.session?.answers?.length ?? 0;
+    const combined = !linked || (bundle.summary?.qaRound?.length ?? 0) >= linked;
+    const ready = !!bundle.summary && combined;
+    if (bundle.summary && !combined) st.set({ analysis: { stage: "qa", pct: 0.5, sessionId } });
+    st.set({ bundle, sessionId, screen: ready ? "debrief" : "analyzing" });
+    return ready;
   } catch (e) {
     st.set({ toast: `Could not open the session: ${(e as Error).message}` });
     return false;
@@ -81,6 +86,14 @@ export default function App() {
           const d = { stage: ev.data.stage, pct: ev.data.pct, sessionId: ev.data.sessionId };
           if (d.sessionId === st.qa?.parentId) set({ mainAnalysis: { stage: d.stage, pct: d.pct, done: d.stage === "done" } });
           if (d.sessionId === st.sessionId && st.screen === "analyzing") set({ analysis: d });
+          break;
+        }
+        case "session.updated": {
+          // the speech and its Q&A answers were merged into one report
+          const st = useApp.getState();
+          const id = ev.data.sessionId as string;
+          if (id === st.sessionId && st.screen === "analyzing") void openSession(id, false);
+          if (st.screen === "debrief" && st.bundle?.sessionId === id) void openSession(id, false);
           break;
         }
         case "audio.silent":

@@ -3,7 +3,7 @@
 //   answer each on the spot) → results. Replays skip the Q&A round.
 import { openSession } from "../../App";
 import { engine } from "../../lib/engine";
-import { setStreaming, startRecording, stopRecording, videoLabel } from "../../lib/camera";
+import { pauseRecording, resumeRecording, setStreaming, startRecording, stopRecording, videoLabel } from "../../lib/camera";
 import { micLabel, startMic, streamTo } from "../../lib/mic";
 import { live, useApp } from "../../stores/app";
 
@@ -27,12 +27,13 @@ export async function startSession(replayFrom: string | null = null, answer: Ans
   const res = await engine.request<{ sessionId: string; replayDuration: number | null }>("session.start", {
     audioSource: "app",
     audioDeviceName: micLabel(),
-    title: answer ? `Answer: ${answer.question}` : replayFrom ? `Replay: ${s.title}` : s.title,
+    title: answer ? `Answer: ${answer.question}` : s.prompt.trim() || "Free practice",
+    prompt: answer ? "" : s.prompt.trim(),
+    gazeMode: s.gazeMode,
     mode: answer ? "qa" : "practice",
     parentSessionId: answer?.parentId,
     question: answer?.question,
     targetDurationSec: answer ? answer.seconds : s.targetMinutes ? s.targetMinutes * 60 : null,
-    audienceSize: s.audienceSize,
     notes: answer ? false : s.notes, // an on-the-spot answer has no notes
     difficulty: s.difficulty,
     replaySessionId: replayFrom,
@@ -51,6 +52,25 @@ export async function startSession(replayFrom: string | null = null, answer: Ans
   }
 }
 
+/** Pause: stop sending audio and gaze (the engine's clock is the audio itself, so time, timers and
+ *  analysis all freeze) and pause the video recording. Resume picks up seamlessly. */
+export async function togglePause(): Promise<void> {
+  const st = useApp.getState();
+  if (st.screen !== "live" || st.replayFrom) return;
+  const sid = st.sessionId;
+  if (!st.paused) {
+    streamTo(null);
+    setStreaming(false);
+    pauseRecording();
+    st.set({ paused: true });
+  } else {
+    if (sid) streamTo((pcm) => engine.sendAudio(sid, pcm));
+    setStreaming(true);
+    resumeRecording();
+    st.set({ paused: false });
+  }
+}
+
 let stopping = false;
 
 export async function stopSession(): Promise<void> {
@@ -59,9 +79,11 @@ export async function stopSession(): Promise<void> {
   const st = useApp.getState();
   const qa = st.qa;
   const wasReplay = !!st.replayFrom;
+  st.set({ paused: false });
   try {
     setStreaming(false);
     streamTo(null);
+    resumeRecording(); // a paused recorder must be running to flush its last chunk
     const blob = await stopRecording();
     const res = await engine.request<{ sessionId: string }>("session.stop", { analyze: true }, 60000);
     if (qa?.answering) {

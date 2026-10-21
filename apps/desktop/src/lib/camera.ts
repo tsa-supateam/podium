@@ -82,3 +82,11 @@ export function stopRecording(): Promise<Blob | null> {
     r.stop();
   });
 }
+
+export function pauseRecording(): void {
+  if (recorder?.state === "recording") recorder.pause();
+}
+
+export function resumeRecording(): void {
+  if (recorder?.state === "paused") recorder.resume();
+}

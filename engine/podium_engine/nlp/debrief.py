@@ -27,6 +27,7 @@ class Item:
     severity: float
     text: str
     t: float | None = None
+    drill: str | None = None
 
 
 def _strengths(s: dict) -> list[Item]:
@@ -114,6 +115,9 @@ def _growth(s: dict, keyphrase_at) -> list[Item]:
             off = round(g["zonePct"]["N"] + g["zonePct"]["X"])
             msg = (f"You looked down or away {off} percent of the time. With no notes, keep your eyes up on the "
                    f"audience, even while you think.")
+        elif g.get("mode") == "camera":
+            msg = (f"You were looking at the camera {round(g['audiencePct'])} percent of the time. Look into the lens "
+                   f"while you speak, and glance down only between points.")
         else:
             side = min(("L", "R"), key=lambda z: g["zonePct"][z])
             name = "left" if side == "L" else "right"
@@ -142,7 +146,7 @@ DRILLS_BY_KEY = {
 
 
 def drill_for(item: Item) -> str:
-    return DRILLS_BY_KEY.get(item.key, DRILLS[item.metric])
+    return item.drill or DRILLS_BY_KEY.get(item.key) or DRILLS.get(item.metric, "")
 
 
 # When nothing crosses a "fix this" threshold, still give the weakest area one concrete next step.
@@ -170,9 +174,11 @@ def _as_dict(item: Item) -> dict:
     return {**item.__dict__, "drill": drill_for(item)}
 
 
-def build(summary: dict, keyphrase_at) -> dict:
-    strengths = _strengths(summary)
-    growth = _growth(summary, keyphrase_at)
+def build(summary: dict, keyphrase_at, extra_growth: list[dict] | None = None,
+          extra_strengths: list[dict] | None = None) -> dict:
+    """extra_*: content items from nlp.content (same shape as Item)."""
+    strengths = sorted(_strengths(summary) + [Item(**x) for x in extra_strengths or []], key=lambda i: -i.severity)
+    growth = sorted(_growth(summary, keyphrase_at) + [Item(**x) for x in extra_growth or []], key=lambda i: -i.severity)
     distinct: list[Item] = []  # most severe first, one per metric
     for g in growth:
         if all(g.metric != p.metric for p in distinct):

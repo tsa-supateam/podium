@@ -444,6 +444,9 @@ class RealtimeEngine:
         self.tel.write("pace", rec)
         self.emit({"type": "pace.tick", "t": rec["t"], "data": rec})
 
+    def _avatar_shares(self, shares: dict | None) -> dict:
+        return _even_audience(shares) if self.meta.get("gazeMode") == "camera" else (shares or {})
+
     def _check_input(self, t: float) -> None:
         """Warn once if the input is digital silence: a denied OS permission delivers exact zeros."""
         level = self.prosody[-1][2] if self.prosody else -180.0
@@ -463,7 +466,10 @@ class RealtimeEngine:
         silence = t - self._last_speech_t
         recent_g = [(t_, z) for (t_, z) in self.gaze if t_ > t - b["gaze_window_s"]]
         shares = fusion.zone_shares((1 / 30, z) for _, z in recent_g) if recent_g else None
-        c_g = fusion.gaze_component(shares, b["gaze_lambda"]) if shares and len(recent_g) > 30 else None
+        camera = self.meta.get("gazeMode") == "camera"
+        # camera mode: eye contact means looking up at the lens; spreading left/right doesn't apply
+        c_g = (fusion.gaze_component(shares, 1.0 if camera else b["gaze_lambda"])
+               if shares and len(recent_g) > 30 else None)
         if shares and shares.get("X", 0) > 0.5:
             c_g = None  # face not visible: don't punish detector failures
 
@@ -495,12 +501,20 @@ class RealtimeEngine:
         state = "engaged" if B < 0.35 else "bored" if B > 0.65 else "neutral"
         rec = {"t": round(t, 3), "Braw": round(b_raw, 3), "B": round(B, 3), "E": E,
                "c": {k: (round(v, 3) if v is not None else None) for k, v in comps_out.items()},
-               "zoneShare": {k: round(v, 3) for k, v in (shares or {}).items()},
+               "zoneShare": {k: round(v, 3) for k, v in self._avatar_shares(shares).items()},
                "audienceState": state, "speaking": self.vad_state.speaking,
                "levelDb": round(self.prosody[-1][2], 1) if self.prosody else -90.0,
                "fillerBurst": sum(1 for f in self.fillers if f.t0 > t - 6) >= 3}
         self.tel.write("engagement", rec)
         self.emit({"type": "engagement.tick", "t": rec["t"], "data": rec})
+
+
+def _even_audience(shares: dict | None) -> dict:
+    """Camera mode: every seating section sees the same eye contact (no side-of-room reaction)."""
+    if not shares:
+        return {}
+    aud = sum(shares.get(z, 0.0) for z in ("L", "C", "R"))
+    return {**shares, "L": aud / 3, "C": aud / 3, "R": aud / 3}
 
 
 def new_meta(session_id: str, title: str, mode: str, cfg: dict, extra: dict | None = None) -> dict:
