@@ -142,10 +142,6 @@ export default function Debrief() {
       <FixNext s={s} coach={coach} onSeek={seek} onPlay={playVoice} speaking={speaking} canPlay={!!voiceUrl} />
       {voiceUrl && <audio ref={voiceRef} src={voiceUrl} onEnded={() => setSpeaking(false)} />}
 
-      <div className="side-by-side">
-        {s.content && <ContentCard s={s} coach={coach} answers={bundle.answers ?? []} />}
-        <DeliveryCard s={s} coach={coach} />
-      </div>
 
       <div className="tabs">
         {tabs.map(([k, label]) => (
@@ -156,7 +152,15 @@ export default function Debrief() {
       </div>
 
       <div className="grid" style={{ alignContent: "start" }}>
-        {tab === "overview" && <Moments s={s} onSeek={seek} />}
+        {tab === "overview" && (
+          <>
+            <div className="side-by-side">
+              {s.content && <ContentCard s={s} coach={coach} answers={bundle.answers ?? []} />}
+              <DeliveryCard s={s} coach={coach} />
+            </div>
+            <Moments s={s} onSeek={seek} />
+          </>
+        )}
         {tab === "gaze" && <GazeTab s={s} />}
         {tab === "timeline" && (
           <div className="card">
