@@ -99,11 +99,12 @@ def analyze(session_dir: Path, progress: Progress = lambda s, p: None, cfg: dict
 
     # 4. pacing
     progress("pacing", 0.0)
-    pc = cfg["pace"]
+    pc = {**cfg["pace"], "band": meta.get("config", {}).get("targetWpm") or cfg["pace"]["band"]}
     ts, wpm, speech = segmentation.wpm_series(words, duration, tr.speech_regions, pc["window_s"])
     pacing = segmentation.pacing_stats(ts, wpm, speech, pc["band"], pc["drag"], pc["rush"])
     pauses = segmentation.pauses_from_words(words)
     speaking_time = sum(b - a for a, b in tr.speech_regions)
+    pacing["band"] = pc["band"]
     pacing["articulationRate"] = round(60 * n_words / speaking_time, 1) if speaking_time > 0 else 0.0
     pacing["pauseRatio"] = round(1 - speaking_time / duration, 3) if duration else 0.0
     pacing["longPauses"] = [x for x in pauses if x["t1"] - x["t0"] >= 2.0]

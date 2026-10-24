@@ -44,6 +44,8 @@ def unpack_binary(frame: bytes) -> tuple[dict, bytes]:
     return json.loads(frame[4 : 4 + n]), frame[4 + n :]
 
 
+SPEED_BANDS = {"prepared": [120, 160], "impromptu": [100, 140]}  # words per minute
+
 class Server:
     def __init__(self, token: str) -> None:
         self.token = token
@@ -181,9 +183,12 @@ class Server:
         title = d.get("title") or "Practice run"
         replay_from = d.get("replaySessionId")
         mode = "replay" if replay_from else d.get("mode", "practice")
+        # Target speed by speech type; a Q&A answer is always on the spot.
+        extra["speechType"] = "impromptu" if mode == "qa" or d.get("speechType") == "impromptu" else "prepared"
+        cfg = {**self.cfg, "pace": {**self.cfg["pace"], "band": SPEED_BANDS[extra["speechType"]]}}
         if mode == "qa":  # an on-the-spot answer to a question about a previous speech
             extra.update(parentSessionId=d["parentSessionId"], question=d.get("question", ""))
-        meta = new_meta(sid, title, mode, self.cfg, extra)
+        meta = new_meta(sid, title, mode, cfg, extra)
         if mode == "qa":
             self._link_answer(d["parentSessionId"], sid, d.get("question", ""))
         if d.get("calibration"):
@@ -192,7 +197,7 @@ class Server:
             meta["calibrated"] = True
         if d.get("videoInput"):
             meta.setdefault("devices", {})["videoInput"] = d["videoInput"]
-        self.engine = RealtimeEngine(sdir, self.emit_threadsafe, meta, self.cfg)
+        self.engine = RealtimeEngine(sdir, self.emit_threadsafe, meta, cfg)
         a = self.cfg["audio"]
         block = int(a["sample_rate"] * a["block_ms"] / 1000)
         if replay_from:

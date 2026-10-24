@@ -3,7 +3,7 @@ import { cameraStream, startCamera, tracker } from "../../lib/camera";
 import { listMics, micLevelDb, startMic } from "../../lib/mic";
 import { CATEGORIES, randomPrompt } from "../../lib/prompts";
 import { zoneNames } from "../../lib/types";
-import { live, useApp, useTicker } from "../../stores/app";
+import { live, SPEED_BANDS, useApp, useTicker } from "../../stores/app";
 import { startSession } from "../live/session";
 
 export default function Setup() {
@@ -65,7 +65,7 @@ export default function Setup() {
             <video ref={videoRef} autoPlay muted playsInline />
             <div className="badge">
               <span className={`pill ${faceOk ? "ok" : "warn"}`}>
-                <span className="dot" /> {faceOk ? `Face found · looking at ${zoneNames(settings.notes)[g!.zone]}` : "Looking for your face…"}
+                <span className="dot" /> {faceOk ? `Face found · ${zoneNames(settings.notes)[g!.zone]}` : "Looking for your face…"}
               </span>
             </div>
           </div>
@@ -116,6 +116,13 @@ export default function Setup() {
               hint={settings.difficulty === "coach"
                 ? "Live tips, a friendlier audience, and encouraging results."
                 : "Test conditions: no tips, a strict audience, and scores out of 100."}
+            />
+            <Toggle
+              label="Speech"
+              value={settings.speechType}
+              options={[["prepared", "Prepared"], ["impromptu", "On the spot"]]}
+              onChange={(v) => setSettings({ speechType: v as "prepared" | "impromptu" })}
+              hint={`Target speed: ${SPEED_BANDS[settings.speechType].join("–")} words per minute.`}
             />
             <Toggle
               label="Look at"

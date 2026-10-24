@@ -71,7 +71,7 @@ def _growth(s: dict, keyphrase_at) -> list[Item]:
                         f"You used {f['total']} filler words, most often \"{top}\". Pausing silently sounds more "
                         f"confident than filling the gap."))
     p = s["pacing"]
-    lo, hi = cfgmod.load()["pace"]["band"]
+    lo, hi = p.get("band") or cfgmod.load()["pace"]["band"]
     mean = p.get("meanWpm", 0)
     rush = [z for z in p.get("accelZones", []) if z["kind"] == "rush"]
     if mean and mean < lo:

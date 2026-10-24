@@ -30,6 +30,7 @@ export async function startSession(replayFrom: string | null = null, answer: Ans
     title: answer ? `Answer: ${answer.question}` : s.prompt.trim() || "Free practice",
     prompt: answer ? "" : s.prompt.trim(),
     gazeMode: s.gazeMode,
+    speechType: s.speechType,
     mode: answer ? "qa" : "practice",
     parentSessionId: answer?.parentId,
     question: answer?.question,

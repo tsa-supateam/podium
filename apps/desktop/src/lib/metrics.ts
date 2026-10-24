@@ -21,9 +21,9 @@ export const METRICS: MetricInfo[] = [
     key: "pacing",
     short: "Speed",
     title: "Speaking speed",
-    what: "How fast you talked. 130–170 words per minute is easiest for an audience to follow.",
+    what: "How fast you talked. The target is 120–160 words per minute for a prepared speech and 100–140 on the spot.",
     how: [
-      "50 points: your average speed is inside 130–170 words per minute (partial credit up to 40 words per minute outside it).",
+      "50 points: your average speed is inside the target for your speech type (partial credit up to 40 words per minute outside it).",
       "30 points: you changed speed a natural amount, slowing down for key points without big swings.",
       "20 points: your speed stayed steady from second to second rather than speeding up and stalling.",
     ],

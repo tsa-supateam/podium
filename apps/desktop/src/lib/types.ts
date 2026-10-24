@@ -91,6 +91,7 @@ export interface Summary {
   scores: Scores;
   pacing: {
     meanWpm: number;
+    band?: [number, number]; // target words per minute for this run
     medianWpm: number;
     stdWpm: number;
     cv: number;

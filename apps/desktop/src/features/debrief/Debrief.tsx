@@ -142,7 +142,10 @@ export default function Debrief() {
       <FixNext s={s} coach={coach} onSeek={seek} onPlay={playVoice} speaking={speaking} canPlay={!!voiceUrl} />
       {voiceUrl && <audio ref={voiceRef} src={voiceUrl} onEnded={() => setSpeaking(false)} />}
 
-      {s.content && <ContentCard s={s} coach={coach} answers={bundle.answers ?? []} />}
+      <div className="side-by-side">
+        {s.content && <ContentCard s={s} coach={coach} answers={bundle.answers ?? []} />}
+        <DeliveryCard s={s} coach={coach} />
+      </div>
 
       <div className="tabs">
         {tabs.map(([k, label]) => (
@@ -162,8 +165,6 @@ export default function Debrief() {
         )}
         {tab === "transcript" && <TranscriptTab bundle={bundle} now={now} onSeek={seek} />}
       </div>
-
-      <DeliveryCard s={s} coach={coach} />
 
       <DetailedStats s={s} />
     </div>
@@ -335,7 +336,7 @@ function DetailedStats({ s }: { s: Summary }) {
           <h3>Speaking speed</h3>
           <div className="kv">
             <span>Average</span><span>{Math.round(s.pacing.meanWpm)} words/min</span>
-            <span>Target</span><span>130–170 words/min</span>
+            <span>Target</span><span>{(s.pacing.band ?? [130, 170]).join("–")} words/min</span>
             <span>While talking</span><span>{Math.round(s.pacing.articulationRate)} words/min</span>
             <span>Speed changes</span><span>{speedChangeWord(s.pacing.cv)}</span>
             <span>Rhythm</span><span>{steadinessWord(s.pacing.npvi)}</span>

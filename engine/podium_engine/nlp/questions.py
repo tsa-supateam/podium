@@ -38,16 +38,24 @@ class Candidate:
                 "source": self.source}
 
 
+# Casual words that a noun-phrase tagger mistakes for topics ("the kinda", "the stuff").
+CASUAL = {"kinda", "sorta", "gonna", "wanna", "gotta", "stuff", "thing", "things", "bro", "okay", "yeah", "guys", "lot"}
+
+
+def topical(np_: str | None) -> bool:
+    return bool(np_) and not any(w in CASUAL for w in np_.split())
+
+
 def the(np_: str) -> str:
     """Add an article so templates read naturally: "pilot project" -> "the pilot project"."""
     first = np_.split()[0]
-    if first in {"the", "a", "an", "this", "that", "these", "those", "our", "your", "my"} or np_.endswith("s"):
+    if first in {"the", "a", "an", "this", "that", "these", "those", "our", "your", "my"} or np_.endswith("s") or "'s" in np_:
         return np_
     return "the " + np_
 
 
 def _best_np(text: str, keyphrases: list[dict]) -> str | None:
-    nps = noun_phrases(text)
+    nps = [p for p in noun_phrases(text) if topical(p)]
     if not nps:
         return None
     weights = {k["phrase"]: k["score"] for k in keyphrases}
@@ -100,7 +108,7 @@ def _sentence_candidates(s: Sentence, keyphrases: list[dict], punctuated: bool =
         else:
             add("causal", f"How confident are you in the cause-and-effect link you described for {the(np_)}?")
     if COMPARE.search(text):
-        nps = noun_phrases(text)
+        nps = [p for p in noun_phrases(text) if topical(p)]
         if len(nps) >= 2 and nps[0] != nps[1]:
             add("comparison", f"How does {the(nps[0])} compare with {the(nps[1])} once you account for cost and trade-offs?")
     if CLAIM.search(text) and np_ and not PROPOSAL.search(text):
@@ -137,6 +145,8 @@ def generate(sents: list[Sentence], keyphrases: list[dict], k: int = 6, punctuat
     full = " ".join(strip_fillers(s.text) for s in sents).lower()
     for kp in keyphrases[:8]:
         p = kp["phrase"]
+        if not topical(p):
+            continue
         if kp.get("count", 0) <= 1 and kp["score"] >= 0.3:
             cands.append(Candidate("under_explained", f"You briefly mentioned {the(p)}. Can you expand on that?",
                                    kp.get("firstT"), 0.6 * kp["score"] + 0.4 * PRIOR["under_explained"], p))

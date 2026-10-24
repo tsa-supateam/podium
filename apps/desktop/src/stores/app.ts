@@ -15,10 +15,14 @@ export interface QARound {
   answering: boolean; // an answer session is recording
 }
 
+/** Target words per minute by speech type (the engine uses the same bands). */
+export const SPEED_BANDS = { prepared: [120, 160], impromptu: [100, 140] } as const;
+
 export interface Settings {
   prompt: string; // the topic for the next run ("" = free talk)
   promptCategory: string | null; // limit random prompts to one category
   gazeMode: "room" | "camera"; // simulated audience (left/center/right) or direct camera (up/down)
+  speechType: "prepared" | "impromptu"; // sets the target speed
   targetMinutes: number | null;
   recordVideo: boolean;
   flipYaw: boolean;
@@ -70,6 +74,7 @@ export const useApp = create<AppState>((set, get) => ({
     prompt: "",
     promptCategory: null,
     gazeMode: "room",
+    speechType: "prepared",
     targetMinutes: 3,
     recordVideo: true,
     flipYaw: false,

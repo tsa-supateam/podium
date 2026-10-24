@@ -8,8 +8,17 @@ let analyser: AnalyserNode | null = null;
 let worklet: AudioWorkletNode | null = null;
 let sink: ((pcm: ArrayBuffer) => void) | null = null;
 const levelBuf = new Float32Array(1024);
+let opening: Promise<unknown> = Promise.resolve();
 
-export async function startMic(deviceId: string | null = null): Promise<MediaStream> {
+/** Calls are queued: two overlapping opens used to leave two capture graphs feeding the engine at once,
+ *  interleaving their frames (twice the audio, garbled speech). */
+export function startMic(deviceId: string | null = null): Promise<MediaStream> {
+  const p = opening.then(() => openMic(deviceId));
+  opening = p.catch(() => {});
+  return p;
+}
+
+async function openMic(deviceId: string | null): Promise<MediaStream> {
   if (stream && deviceIdInUse === deviceId) return stream;
   stopMic();
   stream = await navigator.mediaDevices.getUserMedia({
@@ -29,9 +38,12 @@ export async function startMic(deviceId: string | null = null): Promise<MediaStr
   analyser.fftSize = 1024;
   src.connect(analyser);
   await ctx.audioWorklet.addModule(new URL("./pcm-capture-worklet.js", document.baseURI).toString());
-  worklet = new AudioWorkletNode(ctx, "pcm-capture");
-  worklet.port.onmessage = (e: MessageEvent<ArrayBuffer>) => sink?.(e.data);
-  src.connect(worklet);
+  const node = new AudioWorkletNode(ctx, "pcm-capture");
+  worklet = node;
+  node.port.onmessage = (e: MessageEvent<ArrayBuffer>) => {
+    if (node === worklet) sink?.(e.data);
+  };
+  src.connect(node);
   // Keep the graph pulling without making any sound.
   const mute = ctx.createGain();
   mute.gain.value = 0;

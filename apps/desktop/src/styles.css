@@ -361,3 +361,8 @@ h3 { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: upp
   .qa-row { grid-template-columns: 1fr auto; }
   .qa-row .qa-row-q { grid-column: 1 / -1; order: -1; }
 }
+
+/* Content and delivery read as one table: what you said | how you said it. */
+.side-by-side { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.side-by-side > .card { margin: 0; }
+@media (max-width: 900px) { .side-by-side { grid-template-columns: 1fr; } }

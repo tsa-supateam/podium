@@ -41,6 +41,7 @@ export function Timeline({ s, current, onSeek }: TimelineProps) {
   const lanes = { pace: [10, 70], pitch: [90, 140], fill: [156, 176], gaze: [192, 208] } as const;
   const H = 232;
   const dur = Math.max(s.durationSec, 1);
+  const band = s.pacing.band ?? [130, 170];
   const x = (t: number) => padL + (t / dur) * (W - padL - padR);
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<{ t: number; px: number } | null>(null);
@@ -104,7 +105,7 @@ export function Timeline({ s, current, onSeek }: TimelineProps) {
           <rect key={`m${i}`} x={x(m.t0)} width={Math.max(2, x(m.t1) - x(m.t0))} y={lanes.pitch[0]} height={lanes.pitch[1] - lanes.pitch[0]} fill="#f5b14c18" />
         ))}
         {/* pace band */}
-        <rect x={padL} width={W - padL - padR} y={paceY(170)} height={paceY(130) - paceY(170)} fill="#4fd18b10" />
+        <rect x={padL} width={W - padL - padR} y={paceY(band[1])} height={paceY(band[0]) - paceY(band[1])} fill="#4fd18b10" />
         <line x1={padL} x2={W - padR} y1={lanes.pace[1]} y2={lanes.pace[1]} stroke="var(--line)" />
         <path d={pacePath} fill="none" stroke="var(--info)" strokeWidth={2} />
         {/* pitch */}
@@ -143,7 +144,7 @@ export function Timeline({ s, current, onSeek }: TimelineProps) {
         </div>
       )}
       <div className="legend" style={{ marginTop: 8 }}>
-        <span><i style={{ background: "#4fd18b10", border: "1px solid #4fd18b55" }} />ideal speed (130–170 words/min)</span>
+        <span><i style={{ background: "#4fd18b10", border: "1px solid #4fd18b55" }} />ideal speed ({band.join("–")} words/min)</span>
         <span><i style={{ background: "#ff6b6b18" }} />talking too fast</span>
         <span><i style={{ background: "#f5b14c18" }} />voice went flat</span>
         <span><i style={{ background: "#ff6b6b" }} />um / uh</span>
