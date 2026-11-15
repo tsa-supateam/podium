@@ -388,3 +388,15 @@ h3 { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: upp
 .rating-dots { display: inline-flex; gap: 3px; }
 .rating .dot { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--faint); display: inline-block; }
 .dimension ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.5; }
+
+/* Answer feedback: each Q&A answer gets the same read as the speech. */
+.answer-feedback { display: flex; flex-direction: column; gap: 12px; }
+.answer-fb { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.afb-head { display: flex; align-items: baseline; gap: 10px; }
+.afb-num { font-weight: 700; color: var(--accent); }
+.afb-q { flex: 1; font-weight: 600; }
+.afb-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.afb-scores, .afb-dims { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.afb-score, .afb-dim { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.afb-notes { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.afb-notes .good-note { color: var(--good); }

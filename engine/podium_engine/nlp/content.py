@@ -45,7 +45,9 @@ def _clip(x: float) -> float:
 
 
 def relevance(prompt: str, text: str) -> tuple[float, dict] | None:
-    terms = [t for t in dict.fromkeys(content_tokens(prompt)) if t not in PROMPT_WORDS]
+    from .quick import TEMPLATE_WORDS  # a Q&A question's own wording ("evidence", "argument") isn't its topic
+
+    terms = [t for t in dict.fromkeys(content_tokens(prompt)) if t not in PROMPT_WORDS and t not in TEMPLATE_WORDS]
     if not prompt.strip() or not terms:
         return None
     said = {_stem(t) for t in content_tokens(text)}

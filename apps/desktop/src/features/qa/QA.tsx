@@ -1,15 +1,17 @@
-// Q&A round between the speech and its results: questions built from what was just said,
-// answered on the spot (impromptu / on-demand speaking practice).
+// Q&A round between the speech and its results. It starts once the speech is analyzed, so the
+// questions come from the accurate transcript and what the analysis found in the content.
 import { useEffect, useRef, useState } from "react";
 import { engine } from "../../lib/engine";
 import type { Question } from "../../lib/types";
 import { useApp, useTicker } from "../../stores/app";
+import { STAGES } from "../live/Analyzing";
 import { finishQA, startSession } from "../live/session";
 
 const PREP_SECONDS = 10;
 const KIND: Record<string, string> = {
   statistic: "Evidence", proposal: "Risk", causal: "Cause & effect", claim: "Support", comparison: "Comparison",
-  under_explained: "Go deeper", definition: "Explain it", general: "Big picture",
+  under_explained: "Go deeper", definition: "Explain it", general: "Big picture", counter: "Other side",
+  relevance: "On the prompt",
 };
 
 const voiceCache = new Map<string, Promise<string>>();
@@ -38,12 +40,15 @@ function AnalysisStatus() {
   );
 }
 
+
 function Pick() {
   const { qa, set } = useApp();
+  const main = useApp((s) => s.mainAnalysis);
+  const ready = !main || main.done;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!qa || qa.questions) return;
+    if (!qa || qa.questions || !ready) return;
     engine
       .request<Question[]>("questions.quick", { sessionId: qa.parentId, k: 5 }, 30000)
       .then((questions) => {
@@ -51,7 +56,7 @@ function Pick() {
         questions.forEach((q) => void questionAudio(q.question).catch(() => {})); // warm up the voice
       })
       .catch((e) => setError(e.message));
-  }, [qa, set]);
+  }, [qa, set, ready]);
 
   if (!qa) return null;
   const toggle = (i: number) => {
@@ -65,13 +70,16 @@ function Pick() {
       <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
         <h1>Quick Q&amp;A</h1>
         <span className="spacer" />
-        <AnalysisStatus />
       </div>
       <p className="muted qa-sub">Pick one or two. Answer each out loud, like a judge just asked.</p>
 
       {error && <p style={{ color: "var(--bad)" }}>Could not build questions: {error}</p>}
       {!qa.questions && !error && (
-        <div className="row muted"><div className="spinner small-spinner" /> Writing questions from your speech…</div>
+        <div className="row muted">
+          <div className="spinner small-spinner" />
+          {ready ? "Writing questions from your speech…"
+            : `Analyzing your speech first, so the questions come from what you said. ${STAGES.find(([k]) => k === main!.stage)?.[1] ?? ""}…`}
+        </div>
       )}
 
       <div className="qa-list">

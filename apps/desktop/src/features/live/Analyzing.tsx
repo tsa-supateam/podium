@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { openSession } from "../../App";
 import { useApp } from "../../stores/app";
 
-const STAGES: [string, string][] = [
+export const STAGES: [string, string][] = [
   ["transcribe", "Transcribing with Whisper (on-device)"],
   ["fillers", "Reconciling filler words"],
   ["prosody", "Measuring pitch and loudness"],

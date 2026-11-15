@@ -1,13 +1,14 @@
-"""Instant follow-up questions and on-topic checks for the Q&A round.
+"""Follow-up questions and on-topic checks for the Q&A round.
 
-Questions must be ready within seconds of the speech ending, long before Whisper finishes, so
-they are built from the live Vosk transcript (telemetry/words.ndjson). It has no punctuation,
-but sentences can still be split at pauses, and the keyphrase and template rules work on
-plain lowercase text.
+The Q&A round starts once the speech is analyzed, so questions come from the accurate Whisper
+transcript and from what the analysis found in the content: points left unsupported, prompt ideas
+never covered, a missing answer to the other side. Sessions without an analysis yet (or older
+ones) fall back to the live transcript in telemetry/words.ndjson.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from ..realtime.pace import Word
@@ -28,11 +29,60 @@ TEMPLATE_WORDS = {
     "implementing", "reduce", "confident", "cause", "effect", "link", "described", "explain", "someone",
     "new", "topic", "briefly", "mentioned", "expand", "compare", "compared", "account", "trade-offs",
     "anything", "other", "could", "single", "important", "thing", "want", "audience", "remember",
-    "strongest", "objection", "argument", "answer", "minute", "add", "would", "one", "more",
+    "strongest", "objection", "argument", "answer", "minute", "add", "would", "one", "more", "position",
+    "backs", "examples", "case", "number", "source", "shows", "true", "broadly", "prompt", "connect", "said",
 }
 
 
+def _load(p: Path) -> dict | None:
+    return json.loads(p.read_text(), parse_constant=lambda _: None) if p.exists() else None
+
+
+def _content_questions(summary: dict) -> list[dict]:
+    """Questions aimed at what the speech's analysis found missing, most useful first."""
+    out: list[dict] = []
+    o = summary.get("overview") or {}
+    parts = (summary.get("content") or {}).get("parts", {})
+    for p in o.get("points", []):
+        if not p.get("support"):
+            out.append({"kind": "claim", "question": f"You said “{p['text']}”. What evidence backs that up?", "t": p["t"]})
+    if o.get("persuasive") and not o.get("counterargument"):
+        out.append({"kind": "counter", "t": None,
+                    "question": "What is the strongest argument against your position, and how would you answer it?"})
+    ev = parts.get("evidence")
+    if ev and ev.get("count") and ev.get("hard") is False:
+        out.append({"kind": "statistic", "t": None, "question": "Your examples each show one case. What number or source "
+                    "shows this is true more broadly?"})
+    rel = parts.get("relevance")
+    if rel and rel.get("missing"):
+        out.append({"kind": "relevance", "t": None,
+                    "question": f"How does “{rel['missing'][0]}” from the prompt connect to your argument?"})
+    return [{**q, "score": 1.0, "source": ""} for q in out]
+
+
+def analyzed_questions(session_dir: Path, k: int) -> list[dict] | None:
+    """Questions from the finished analysis, or None if the speech isn't analyzed yet."""
+    tr = _load(session_dir / "transcript.json")
+    summary = _load(session_dir / "summary.json")
+    if not tr or not summary or summary.get("noSpeech"):
+        return None
+    words = [Word(w["t0"], w["t1"], w["w"], w.get("p", 1.0)) for w in tr["words"]]
+    out = _content_questions(summary)[:3]
+    if len(words) >= 15:
+        seen = {q["question"] for q in out}
+        gen = questions.generate(sentences(words), summary.get("keyphrases") or [], k=k, punctuated=True)
+        out += [q for q in gen if q["kind"] != "general" and q["question"] not in seen]
+    return out
+
+
 def quick_questions(session_dir: Path, k: int = 5) -> list[dict]:
+    out = analyzed_questions(session_dir, k)
+    if out is not None:
+        for g in GENERAL:
+            if len(out) >= k:
+                break
+            out.append({**g, "t": None, "score": 0.0, "source": ""})
+        return out[:k]
     tel = session_dir / "telemetry"
     rows = read_ndjson(tel / "words.ndjson")
     # Live Whisper words are punctuated; older sessions (and a failed live model) only have Vosk.

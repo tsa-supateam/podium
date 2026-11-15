@@ -156,9 +156,10 @@ export default function Debrief() {
           <>
             {s.overview && <ArgumentCard o={s.overview} onSeek={seek} />}
             <div className="side-by-side">
-              {s.content && <ContentCard s={s} coach={coach} answers={bundle.answers ?? []} />}
+              {s.content && <ContentCard s={s} coach={coach} />}
               <DeliveryCard s={s} coach={coach} />
             </div>
+            <AnswerFeedback s={s} coach={coach} answers={bundle.answers ?? []} />
             <Moments s={s} onSeek={seek} />
           </>
         )}
@@ -580,19 +581,8 @@ function contentDetail(key: string, part: any): string {
   }
 }
 
-function ContentCard({ s, coach, answers }: { s: Summary; coach: boolean; answers: AnswerBundle[] }) {
+function ContentCard({ s, coach }: { s: Summary; coach: boolean }) {
   const c = s.content!;
-  const [playing, setPlaying] = useState<string | null>(null);
-  const audio = useRef<HTMLAudioElement | null>(null);
-  const play = async (id: string) => {
-    audio.current?.pause();
-    if (playing === id) return setPlaying(null);
-    audio.current = new Audio(await engine.fileUrl(id, "audio.wav", "audio/wav"));
-    audio.current.onended = () => setPlaying(null);
-    void audio.current.play();
-    setPlaying(id);
-  };
-  const qa = s.qaRound ?? [];
   return (
     <section className="card content-card">
       <div className="row eng-head">
@@ -608,23 +598,76 @@ function ContentCard({ s, coach, answers }: { s: Summary; coach: boolean; answer
           </div>
         ))}
       </div>
-      {qa.length > 0 && (
-        <div className="qa-rows">
-          {qa.map((a) => {
-            const has = answers.find((x) => x.sessionId === a.sessionId)?.files.includes("audio.wav");
-            return (
-              <div className="qa-row" key={a.sessionId}>
-                <span className={`tag ${a.onTopic ? "good" : "bad"}`}>{a.onTopic ? "✓ On topic" : "✗ Off topic"}</span>
-                <span className="qa-row-q">{a.question}</span>
-                <span className="muted small">{Math.round(a.durationSec)} s · {a.words} words · {a.fillers} fillers</span>
-                <button className="icon-btn" onClick={() => void play(a.sessionId)} disabled={!has}>
-                  {playing === a.sessionId ? "■ Stop" : "▶ Listen"}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
+    </section>
+  );
+}
+
+/** Each Q&A answer, analyzed the same way as the speech: argument, content and delivery. */
+function AnswerFeedback({ s, coach, answers }: { s: Summary; coach: boolean; answers: AnswerBundle[] }) {
+  const [playing, setPlaying] = useState<string | null>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const play = async (id: string) => {
+    audio.current?.pause();
+    if (playing === id) return setPlaying(null);
+    audio.current = new Audio(await engine.fileUrl(id, "audio.wav", "audio/wav"));
+    audio.current.onended = () => setPlaying(null);
+    void audio.current.play();
+    setPlaying(id);
+  };
+  const qa = s.qaRound ?? [];
+  if (!qa.length) return null;
+  return (
+    <section className="card answer-feedback">
+      <h3>Answer feedback</h3>
+      {qa.map((a, n) => {
+        const has = answers.find((x) => x.sessionId === a.sessionId)?.files.includes("audio.wav");
+        const silent = !a.words;
+        return (
+          <div className="answer-fb" key={a.sessionId}>
+            <div className="afb-head">
+              <span className="afb-num">Q{n + 1}</span>
+              <span className="afb-q">{a.question}</span>
+              <button className="icon-btn" onClick={() => void play(a.sessionId)} disabled={!has}>
+                {playing === a.sessionId ? "■ Stop" : "▶ Listen"}
+              </button>
+            </div>
+            <div className="afb-meta muted small">
+              <span className={`tag ${a.onTopic ? "good" : "bad"}`}>{a.onTopic ? "✓ On topic" : "✗ Off topic"}</span>
+              {Math.round(a.durationSec)} s · {a.words} words · {Math.round(a.wpm)} words/min · {a.fillers} filler{a.fillers === 1 ? "" : "s"}
+            </div>
+            {silent ? (
+              <p className="muted">No answer was recorded.</p>
+            ) : (
+              <>
+                <div className="afb-scores">
+                  {a.content && (
+                    <span className="afb-score"><span className="cp-name">Content</span><Level v={a.content.score} coach={coach} /></span>
+                  )}
+                  {a.scores && DELIVERY_METRICS.map((m) => (
+                    <span className="afb-score" key={m.key}><span className="cp-name">{m.title}</span><Level v={a.scores![m.key]} coach={coach} /></span>
+                  ))}
+                </div>
+                {a.dimensions && (
+                  <div className="afb-dims">
+                    {DIMENSIONS.map((d) => (
+                      <span className="afb-dim" key={d.key} title={a.dimensions![d.key].feedback.join(" ")}>
+                        <span className="dim-title">{d.title}</span>
+                        <Rating score={a.dimensions![d.key].score} />
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {(a.strengths?.length || a.tips?.length) ? (
+                  <ul className="afb-notes">
+                    {a.strengths?.slice(0, 1).map((t, i) => <li key={`s${i}`} className="good-note">✓ {t}</li>)}
+                    {a.tips?.map((t, i) => <li key={`t${i}`}>→ {t}</li>)}
+                  </ul>
+                ) : null}
+              </>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }

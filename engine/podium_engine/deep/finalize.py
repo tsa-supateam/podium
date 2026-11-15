@@ -46,7 +46,8 @@ def answer_inputs(meta: dict) -> list[dict]:
                     "mentioned": qa.get("mentioned", []), "terms": qa.get("terms", []),
                     "scores": s.get("scores", {}), "wpm": (s.get("pacing") or {}).get("meanWpm", 0),
                     "fillers": (s.get("fillers") or {}).get("total", 0),
-                    "fillerTokens": (s.get("fillers") or {}).get("byToken", {}), "noSpeech": s.get("noSpeech", False)})
+                    "fillerTokens": (s.get("fillers") or {}).get("byToken", {}), "noSpeech": s.get("noSpeech", False),
+                    "content": s.get("content"), "overview": s.get("overview"), "debrief": s.get("debrief") or {}})
     return out
 
 
@@ -74,7 +75,7 @@ def finalize(session_dir: Path, base: dict, words: list[Word], meta: dict, answe
                             prompt=prompt, answers=usable, keyphrases=base.get("keyphrases"))
     summary["content"] = c
     # plain-language Structure / Evidence / Commentary read of the speech (Q&A answers add evidence)
-    summary["overview"] = None if is_answer else argument.overview(
+    summary["overview"] = argument.overview(
         sents, duration, prompt, base.get("keyphrases"), answers=[a["text"] for a in usable])
 
     # delivery: speech and answers together, weighted by how long each lasted
@@ -93,7 +94,12 @@ def finalize(session_dir: Path, base: dict, words: list[Word], meta: dict, answe
         summary["qaRound"] = [
             {"sessionId": a["sessionId"], "question": a["question"], "onTopic": a["onTopic"],
              "mentioned": a["mentioned"], "durationSec": a["durationSec"], "wpm": a["wpm"], "fillers": a["fillers"],
-             "words": len(a["text"].split())} for a in answers]
+             "words": len(a["text"].split()),
+             # the answer's own report, analyzed the same way as the speech
+             "scores": a["scores"], "content": a["content"],
+             "dimensions": (a["overview"] or {}).get("dimensions"),
+             "strengths": [x["text"] for x in a["debrief"].get("strengths", [])],
+             "tips": [x["text"] for x in a["debrief"].get("growth", [])]} for a in answers]
     mean_e = [(duration, (base.get("engagement") or {}).get("meanE"))] + [
         (a["durationSec"], a["scores"].get("audienceE")) for a in usable]
     scores = scoring.top_level(delivery, c["score"], sc.get("structure"), _weighted(mean_e), base.get("noSpeech", False))

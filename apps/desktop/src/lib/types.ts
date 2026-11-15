@@ -191,7 +191,15 @@ export interface Summary {
     counterargument: boolean;
     persuasive: boolean;
   } | null;
-  qaRound?: { sessionId: string; question: string; onTopic: boolean; mentioned: string[]; durationSec: number; wpm: number; fillers: number; words: number }[];
+  qaRound?: {
+    sessionId: string; question: string; onTopic: boolean; mentioned: string[]; durationSec: number; wpm: number; fillers: number; words: number;
+    /** The answer's own report, analyzed the same way as the speech (missing on older sessions). */
+    scores?: Record<string, number | null>;
+    content?: { score: number | null; parts: Record<string, any> } | null;
+    dimensions?: Record<"structure" | "evidence" | "commentary", { score: number; feedback: string[] }> | null;
+    strengths?: string[];
+    tips?: string[];
+  }[];
 }
 
 export interface Transcript {

@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 
 from .keyphrases import is_rare
-from .text import Sentence, noun_phrases, pos_tag, strip_fillers
+from .text import Sentence, noun_phrases, pos_tag, stopwords, strip_fillers
 
 CLAIM = re.compile(r"\b(should|must|need to|have to|will|always|never|best|worst|most important|clearly|obviously)\b", re.IGNORECASE)
 CAUSAL = re.compile(r"\b(because|leads? to|caus(es|ed|ing)|results? in|therefore|due to|so that|which means|that means)\b", re.IGNORECASE)
@@ -43,7 +43,11 @@ CASUAL = {"kinda", "sorta", "gonna", "wanna", "gotta", "stuff", "thing", "things
 
 
 def topical(np_: str | None) -> bool:
-    return bool(np_) and not any(w in CASUAL for w in np_.split())
+    """Real topics only: no casual words, and no contractions of function words ("what's", "it's")."""
+    if not np_:
+        return False
+    sw = stopwords()
+    return not any(w in CASUAL or (w.endswith("'s") and w[:-2] in sw) for w in np_.split())
 
 
 def the(np_: str) -> str:
