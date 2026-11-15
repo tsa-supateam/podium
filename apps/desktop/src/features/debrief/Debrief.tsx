@@ -4,6 +4,7 @@ import type { AnswerBundle, DebriefItem, SessionBundle, SessionRow, Summary } fr
 import { useApp } from "../../stores/app";
 import { CONTENT_PARTS, DELIVERY_METRICS, OVERALL_HOW, TOP_METRICS, clusteringWord, coachLevel, firstSentence, speedChangeWord, steadinessWord, strengthLine, stripDrillLabel, voiceWord } from "../../lib/metrics";
 import { keyMoments } from "../../lib/moments";
+import { AchievementBanner } from "../achievements/achievements";
 import { EngagementChart, GazeHeatmap, ScoreRing, Timeline, ZoneBars, engagementHeadline, scoreColor } from "./charts";
 
 type Tab = "overview" | "timeline" | "gaze" | "transcript";
@@ -84,6 +85,7 @@ export default function Debrief() {
 
   return (
     <div className="page debrief">
+      {sid && bundle.session?.mode !== "replay" && <AchievementBanner sessionId={sid} />}
       <div className="row debrief-title">
         <div>
           <h1>{s.title || "Debrief"}</h1>

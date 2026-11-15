@@ -5,6 +5,7 @@ import type { SessionRow } from "../../lib/types";
 import { useApp } from "../../stores/app";
 import { scoreColor } from "../debrief/charts";
 import { startSession } from "../live/session";
+import { AchievementsView } from "../achievements/achievements";
 
 export function fmtDuration(s: number): string {
   const m = Math.floor(s / 60);
@@ -66,6 +67,7 @@ export function SessionList({ rows, onChange }: { rows: SessionRow[]; onChange: 
 
 export default function History() {
   const [rows, setRows] = useState<SessionRow[] | null>(null);
+  const [view, setView] = useState<"runs" | "achievements">("runs");
   useEffect(() => {
     engine.request<SessionRow[]>("sessions.list", { limit: 200 }).then(setRows).catch(() => setRows([]));
   }, []);
@@ -75,6 +77,13 @@ export default function History() {
     <div className="page">
       <div className="row" style={{ marginBottom: 18 }}>
         <h1>History</h1>
+        <div className="segmented history-tabs" role="tablist">
+          {(["runs", "achievements"] as const).map((v) => (
+            <button key={v} role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => setView(v)}>
+              {v === "runs" ? "Runs" : "Achievements"}
+            </button>
+          ))}
+        </div>
         <span className="spacer" />
         {window.podium && (
           <button className="btn ghost" onClick={() => window.podium?.openDataFolder()}>
@@ -82,6 +91,7 @@ export default function History() {
           </button>
         )}
       </div>
+      {view === "achievements" ? <AchievementsView /> : <>
       {scored.length >= 2 && (
         <div className="card" style={{ marginBottom: 18 }}>
           <h3 style={{ marginBottom: 10 }}>Progress</h3>
@@ -91,6 +101,7 @@ export default function History() {
       {rows === null ? <div className="spinner" /> : null}
       {rows?.length === 0 && <p className="muted">No sessions yet. Your practice runs will appear here.</p>}
       {rows && <SessionList rows={rows} onChange={setRows} />}
+      </>}
     </div>
   );
 }

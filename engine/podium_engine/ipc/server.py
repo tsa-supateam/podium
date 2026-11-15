@@ -140,6 +140,10 @@ class Server:
             await self.start_session(ev, d)
         elif t == "session.stop":
             await self.stop_session(ev)
+        elif t == "achievements.list":
+            from .. import achievements
+
+            await self.reply(ev, "achievements", achievements.earned())
         elif t == "sessions.list":
             await self.reply(ev, "sessions", storage.Index().list(int(d.get("limit", 50))))
         elif t == "session.get":
