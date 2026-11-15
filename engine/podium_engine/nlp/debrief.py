@@ -175,10 +175,12 @@ def _as_dict(item: Item) -> dict:
 
 
 def build(summary: dict, keyphrase_at, extra_growth: list[dict] | None = None,
-          extra_strengths: list[dict] | None = None) -> dict:
-    """extra_*: content items from nlp.content (same shape as Item)."""
+          extra_strengths: list[dict] | None = None, skip: set[str] | None = None) -> dict:
+    """extra_*: content items from nlp.content (same shape as Item). skip: tip keys already covered
+    elsewhere on the results screen."""
     strengths = sorted(_strengths(summary) + [Item(**x) for x in extra_strengths or []], key=lambda i: -i.severity)
     growth = sorted(_growth(summary, keyphrase_at) + [Item(**x) for x in extra_growth or []], key=lambda i: -i.severity)
+    growth = [g for g in growth if g.key not in (skip or set())]
     distinct: list[Item] = []  # most severe first, one per metric
     for g in growth:
         if all(g.metric != p.metric for p in distinct):

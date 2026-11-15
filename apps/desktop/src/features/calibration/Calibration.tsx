@@ -1,7 +1,7 @@
 // 4-point gaze calibration (spec §4.3.3): fit one Gaussian per zone in (yaw, pitch) space.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { tracker } from "../../lib/camera";
-import { fitZoneModel, gazeAngles, DEFAULT_GAINS, type ZoneModel } from "../../lib/gaze";
+import { fitZoneModel, gazeAngles, irisReliability, type ZoneModel } from "../../lib/gaze";
 import type { RawGaze } from "../../lib/faceTracker";
 import { useApp } from "../../stores/app";
 
@@ -28,7 +28,7 @@ export default function Calibration() {
   }, [settings.notes, settings.gazeMode]);
   const [step, setStep] = useState(-1);
   const [progress, setProgress] = useState(0);
-  const samples = useRef<Record<Z, [number, number][]>>({ L: [], C: [], R: [], N: [] });
+  const samples = useRef<Record<Z, RawGaze[]>>({ L: [], C: [], R: [], N: [] });
 
   useEffect(() => {
     const prev = tracker.onRaw;
@@ -36,9 +36,8 @@ export default function Calibration() {
     let collecting = false;
     tracker.onRaw = (r: RawGaze) => {
       prev(r);
-      if (!collecting || !current || !r.face || r.openness < 0.12) return;
-      const g = gazeAngles(r, r, DEFAULT_GAINS, settings.flipYaw);
-      samples.current[current].push([g.gYaw, g.gPitch]);
+      // Keep raw readings: blink cut-off and iris weight are set from them once calibration ends.
+      if (collecting && current && r.face) samples.current[current].push({ ...r, landmarks: undefined });
     };
     let cancelled = false;
     (async () => {
@@ -58,13 +57,24 @@ export default function Calibration() {
       }
       if (cancelled) return;
       setStep(steps.length);
-      const model: ZoneModel = fitZoneModel(samples.current);
-      const ok = steps.every((st) => samples.current[st.zone].length >= 10);
+      // Glasses: lenses lower the measured eye openness and glare makes the iris jumpy, so the
+      // blink cut-off follows this person's eyes and the iris counts less when it is noisy.
+      const { gains, minOpen, glasses } = irisReliability(samples.current);
+      const pts = Object.fromEntries(Object.entries(samples.current).map(([z, rs]) => [
+        z, rs.filter((r) => r.openness >= minOpen).map((r) => {
+          const g = gazeAngles(r, r, gains, settings.flipYaw);
+          return [g.gYaw, g.gPitch] as [number, number];
+        }),
+      ])) as Record<Z, [number, number][]>;
+      const model: ZoneModel = fitZoneModel(pts);
+      const ok = steps.every((st) => pts[st.zone].length >= 10);
       if (ok) {
         tracker.model = model;
-        set({ zoneModel: model, calibrated: true, toast: "Gaze calibrated for this room" });
+        tracker.gains = gains;
+        set({ zoneModel: model, gains, calibrated: true,
+          toast: glasses ? "Gaze calibrated. Your eyes were hard to read (glasses?), so head direction counts more." : "Gaze calibrated for this room" });
       } else {
-        set({ toast: "Calibration needs your face to stay visible. Using default angles." });
+        set({ toast: "Calibration needs your face to stay visible. Please try again." });
       }
       await sleep(700);
       go("setup");

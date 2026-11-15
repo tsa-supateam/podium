@@ -101,7 +101,7 @@ export default function Setup() {
               <Check ok={camOk} label="Camera on" />
               <Check ok={faceOk} label="Face visible and well lit" />
               <Check ok={!micErr && !micDead && level > -95} label="Microphone picking up sound (say something)" />
-              <Check ok={calibrated} label="Gaze calibrated (recommended)" />
+              <Check ok={calibrated} label="Gaze calibrated (required)" />
             </ul>
           </div>
         </div>
@@ -128,7 +128,7 @@ export default function Setup() {
               label="Look at"
               value={settings.gazeMode}
               options={[["room", "Simulated audience"], ["camera", "Direct camera"]]}
-              onChange={(v) => setSettings({ gazeMode: v as "room" | "camera" })}
+              onChange={(v) => { if (v !== settings.gazeMode) set({ calibrated: false }); setSettings({ gazeMode: v as "room" | "camera" }); }}
               hint={camera
                 ? "Like a video interview: eye contact means looking up at the camera."
                 : "Like a room: sweep your eyes across the left, center and right of the audience."}
@@ -137,7 +137,7 @@ export default function Setup() {
               label="Notes"
               value={settings.notes ? "yes" : "no"}
               options={[["yes", "Using notes or slides"], ["no", "No notes"]]}
-              onChange={(v) => setSettings({ notes: v === "yes" })}
+              onChange={(v) => { if ((v === "yes") !== settings.notes) set({ calibrated: false }); setSettings({ notes: v === "yes" }); }}
               hint={settings.notes
                 ? "Glancing down at notes is expected. Looks over 5 s count against you."
                 : "Looking down counts as looking away. Target: 85% eye contact."}
@@ -185,12 +185,13 @@ export default function Setup() {
           </div>
 
           <div className="row">
-            <button className="btn big" onClick={() => go("calibrate")} disabled={!faceOk}>
+            <button className={`btn big ${calibrated ? "" : "primary"}`} onClick={() => go("calibrate")} disabled={!faceOk}>
               {calibrated ? "Recalibrate" : camera ? "Calibrate gaze (6 s)" : "Calibrate gaze (12 s)"}
             </button>
             <span className="spacer" />
-            <button className="btn primary big" onClick={begin} disabled={starting}>
-              {starting ? "Starting…" : "Start speaking"}
+            <button className={`btn big ${calibrated ? "primary" : ""}`} onClick={begin} disabled={starting || !calibrated}
+              title={calibrated ? undefined : "Calibrate your gaze first so eye contact is measured for your setup"}>
+              {starting ? "Starting…" : calibrated ? "Start speaking" : "Calibrate to start"}
             </button>
           </div>
         </div>

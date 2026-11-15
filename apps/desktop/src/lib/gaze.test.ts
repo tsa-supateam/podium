@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_ZONE_MODEL, OneEuro, StickyZoneFilter, fitGaussian, gazeAngles, headPose, irisOffset, mahalanobis2,
+  DEFAULT_GAINS, DEFAULT_ZONE_MODEL, OneEuro, StickyZoneFilter, fitGaussian, gazeAngles, headPose, irisOffset, irisReliability, mahalanobis2,
   zoneProbabilities, type Point,
 } from "./gaze";
 import type { Zone } from "./types";
@@ -111,5 +111,23 @@ describe("calibration guard", () => {
     expect(m.L.mu[0]).toBeCloseTo(12);
     expect(m.R.mu[0]).toBeCloseTo(32.7);
     expect(m.N.mu[1]).toBeLessThanOrEqual(-15.9); // default "down" offset kept relative to center
+  });
+});
+
+describe("irisReliability", () => {
+  const steady = (n: number, jitter: number, openness: number) =>
+    Array.from({ length: n }, (_, i) => ({ dx: (i % 2 ? 1 : -1) * jitter, dy: (i % 2 ? 1 : -1) * jitter * 2, openness }));
+
+  it("keeps full iris weight for steady bare eyes", () => {
+    const r = irisReliability({ C: steady(30, 0.02, 0.3), L: steady(30, 0.02, 0.3) });
+    expect(r.gains).toEqual(DEFAULT_GAINS);
+    expect(r.glasses).toBe(false);
+  });
+
+  it("leans on head direction when the iris is noisy and eyes look narrow (glasses)", () => {
+    const r = irisReliability({ C: steady(30, 0.15, 0.1), L: steady(30, 0.15, 0.1) });
+    expect(r.gains.kx).toBeLessThan(DEFAULT_GAINS.kx * 0.5);
+    expect(r.glasses).toBe(true);
+    expect(r.minOpen).toBeLessThan(0.1); // narrow-looking eyes aren't dropped as blinks
   });
 });

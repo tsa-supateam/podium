@@ -66,6 +66,7 @@ def finalize(session_dir: Path, base: dict, words: list[Word], meta: dict, answe
     text = " ".join(w.w for w in words)
     duration = base["durationSec"]
     is_answer = meta.get("mode") == "qa"
+    practice = meta.get("difficulty", "coach") == "coach"
     prompt = meta.get("question", "") if is_answer else meta.get("prompt", "")
     usable = [a for a in answers if not a["noSpeech"]]
 
@@ -76,7 +77,7 @@ def finalize(session_dir: Path, base: dict, words: list[Word], meta: dict, answe
     summary["content"] = c
     # plain-language Structure / Evidence / Commentary read of the speech (Q&A answers add evidence)
     summary["overview"] = argument.overview(
-        sents, duration, prompt, base.get("keyphrases"), answers=[a["text"] for a in usable])
+        sents, duration, prompt, base.get("keyphrases"), answers=[a["text"] for a in usable], practice=practice)
 
     # delivery: speech and answers together, weighted by how long each lasted
     sc = base["scores"]
@@ -102,7 +103,10 @@ def finalize(session_dir: Path, base: dict, words: list[Word], meta: dict, answe
              "tips": [x["text"] for x in a["debrief"].get("growth", [])]} for a in answers]
     mean_e = [(duration, (base.get("engagement") or {}).get("meanE"))] + [
         (a["durationSec"], a["scores"].get("audienceE")) for a in usable]
-    scores = scoring.top_level(delivery, c["score"], sc.get("structure"), _weighted(mean_e), base.get("noSpeech", False))
+    structure = sc.get("structure")
+    if practice and structure is not None:
+        structure = round(40 + 0.6 * structure)  # practice: a missing hook or ending costs less
+    scores = scoring.top_level(delivery, c["score"], structure, _weighted(mean_e), base.get("noSpeech", False))
     scores["audienceE"] = (base.get("engagement") or {}).get("meanE")
     summary["scores"] = scores
 
@@ -119,7 +123,9 @@ def finalize(session_dir: Path, base: dict, words: list[Word], meta: dict, answe
     if base.get("noSpeech"):
         deb = debrief.no_speech(summary)
     else:
-        deb = debrief.build(summary, keyphrase_at, extra_growth=content_mod.tips(c, minutes),
+        # the Overview's Evidence and Structure ratings already explain these, every run
+        covered = {"CONTENT_EVIDENCE", "GROW_CONCLUSION"} if summary["overview"] else set()
+        deb = debrief.build(summary, keyphrase_at, extra_growth=content_mod.tips(c, minutes), skip=covered,
                             extra_strengths=content_mod.strengths(c))
     summary["debrief"] = deb
     (session_dir / "debrief.txt").write_text(deb["text"] + "\n")

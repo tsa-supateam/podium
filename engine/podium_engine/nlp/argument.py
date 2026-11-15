@@ -206,12 +206,12 @@ def _sentence(parts: list[str]) -> str:
 
 
 # ---------------------------------------------------------------- the three dimensions
-def _structure(thesis, points, concluded: bool, tied: bool, persuasive: bool) -> dict:
+def _structure(thesis, points, concluded: bool, tied: bool, persuasive: bool, practice: bool = False) -> dict:
     position = "position" if persuasive else "main idea"
     what = "reasons" if persuasive else "points"
     n = len(points)
     raw = 1 + bool(thesis) + (1 if n >= 2 else 0.5 if n == 1 else 0) + concluded + (concluded and tied)
-    score = min(5, int(raw + 0.5))
+    score = min(5, int(raw + 0.5) + practice)  # practice: one step more generous
 
     good, fix = [], []
     if thesis:
@@ -234,7 +234,8 @@ def _structure(thesis, points, concluded: bool, tied: bool, persuasive: bool) ->
     else:
         fix.append(f"The talk stopped without a conclusion. Finish by restating your {position}"
                    + (f" and your {_count(n)} {what}" if n >= 2 else "") + " in one or two sentences.")
-    return {"score": score, "feedback": ([_sentence(good)] if good else []) + fix[:2]}
+    # practice: one thing to fix at a time
+    return {"score": score, "feedback": ([_sentence(good)] if good else []) + fix[: 1 if practice else 2]}
 
 
 def _evidence(points: list[dict], support: list[dict], qa_support: list[dict], n_words: int) -> dict:
@@ -358,8 +359,8 @@ def _commentary(sents: list[Sentence], points: list[dict], support: list[dict], 
 
 # ---------------------------------------------------------------- the overview
 def overview(sents: list[Sentence], duration: float, prompt: str = "", keyphrases: list[dict] | None = None,
-             answers: list[str] | None = None) -> dict | None:
-    """answers: transcripts of the Q&A answers, read for extra evidence."""
+             answers: list[str] | None = None, practice: bool = False) -> dict | None:
+    """answers: transcripts of the Q&A answers, read for extra evidence. practice: gentler structure read."""
     n_words = sum(len(strip_fillers(s.text).split()) for s in sents)
     if n_words < 40:
         return None
@@ -396,7 +397,7 @@ def overview(sents: list[Sentence], duration: float, prompt: str = "", keyphrase
                                                    else "Your talk didn't settle on one clear claim.")
 
     dims = {
-        "structure": _structure(thesis, points, concluded, tied, persuasive),
+        "structure": _structure(thesis, points, concluded, tied, persuasive, practice),
         "evidence": _evidence(points, support, qa_support, n_words),
         "commentary": _commentary(sents, points, support, persuasive, claim_stems),
     }

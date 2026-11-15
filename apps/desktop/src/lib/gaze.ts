@@ -61,6 +61,35 @@ export interface GazeCalibrationGains {
 }
 export const DEFAULT_GAINS: GazeCalibrationGains = { kx: 30, ky: 20 };
 
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length ? s[Math.floor(s.length / 2)] : 0;
+};
+const std = (xs: number[]) => {
+  const m = xs.reduce((a, b) => a + b, 0) / Math.max(xs.length, 1);
+  return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / Math.max(xs.length - 1, 1));
+};
+
+/**
+ * Per-person iris trust from calibration, where gaze holds still on each target.
+ * Bare eyes jitter by about 0.04 (x) / 0.08 (y) eye-widths; glasses (glare, refraction, frames
+ * cutting the lids) make it noisier and lower the measured openness. Noisy iris -> lower gain,
+ * so head direction carries the estimate; the blink cut-off scales with this person's openness.
+ */
+export function irisReliability(samples: Record<string, { dx: number; dy: number; openness: number }[]>): {
+  gains: GazeCalibrationGains; minOpen: number; glasses: boolean;
+} {
+  const all = Object.values(samples).flat();
+  const minOpen = Math.min(0.12, Math.max(0.05, 0.5 * median(all.map((r) => r.openness))));
+  const held = Object.values(samples).map((rs) => rs.filter((r) => r.openness >= minOpen)).filter((rs) => rs.length >= 8);
+  if (!held.length) return { gains: DEFAULT_GAINS, minOpen, glasses: false };
+  const sx = median(held.map((rs) => std(rs.map((r) => r.dx))));
+  const sy = median(held.map((rs) => std(rs.map((r) => r.dy))));
+  const rx = Math.min(1, Math.max(0.35, 0.05 / Math.max(sx, 1e-6)));
+  const ry = Math.min(1, Math.max(0.35, 0.1 / Math.max(sy, 1e-6)));
+  return { gains: { kx: DEFAULT_GAINS.kx * rx, ky: DEFAULT_GAINS.ky * ry }, minOpen, glasses: Math.min(rx, ry) < 0.7 };
+}
+
 /**
  * Combined gaze angles in the speaker's frame:
  *   gYaw > 0   → toward the SPEAKER's right (image left; the camera faces the speaker)

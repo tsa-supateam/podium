@@ -38,25 +38,34 @@ def _load(p: Path) -> dict | None:
     return json.loads(p.read_text(), parse_constant=lambda _: None) if p.exists() else None
 
 
+# Generated questions that quote something concrete from the speech (a figure, a proposal). Others
+# (cause-and-effect, comparison, "explain X", "you briefly mentioned X") fill a template with a
+# noun phrase and too often read as nonsense ("Could anything other than students explain the
+# homework?"), so a finished analysis leaves them out.
+ANCHORED = {"statistic", "proposal"}
+
+
 def _content_questions(summary: dict) -> list[dict]:
-    """Questions aimed at what the speech's analysis found missing, most useful first."""
+    """Questions about the speaker's own argument, quoting it, most useful first."""
     out: list[dict] = []
     o = summary.get("overview") or {}
     parts = (summary.get("content") or {}).get("parts", {})
-    for p in o.get("points", []):
-        if not p.get("support"):
-            out.append({"kind": "claim", "question": f"You said “{p['text']}”. What evidence backs that up?", "t": p["t"]})
+    points = o.get("points", [])
+    for p in [p for p in points if not p.get("support")][:2]:
+        out.append({"kind": "claim", "question": f"You said “{p['text']}”. What evidence backs that up?", "t": p["t"]})
+    if o.get("thesis"):
+        out.append({"kind": "thesis", "t": o["thesis"]["t"],
+                    "question": f"Your main claim was “{o['thesis']['text']}”. What is your single strongest reason for it?"})
     if o.get("persuasive") and not o.get("counterargument"):
         out.append({"kind": "counter", "t": None,
                     "question": "What is the strongest argument against your position, and how would you answer it?"})
+    for p in [p for p in points if p.get("support")][:1]:
+        out.append({"kind": "commentary", "question": f"You said “{p['text']}”. Why does that matter to your audience?",
+                    "t": p["t"]})
     ev = parts.get("evidence")
     if ev and ev.get("count") and ev.get("hard") is False:
         out.append({"kind": "statistic", "t": None, "question": "Your examples each show one case. What number or source "
                     "shows this is true more broadly?"})
-    rel = parts.get("relevance")
-    if rel and rel.get("missing"):
-        out.append({"kind": "relevance", "t": None,
-                    "question": f"How does “{rel['missing'][0]}” from the prompt connect to your argument?"})
     return [{**q, "score": 1.0, "source": ""} for q in out]
 
 
@@ -67,11 +76,11 @@ def analyzed_questions(session_dir: Path, k: int) -> list[dict] | None:
     if not tr or not summary or summary.get("noSpeech"):
         return None
     words = [Word(w["t0"], w["t1"], w["w"], w.get("p", 1.0)) for w in tr["words"]]
-    out = _content_questions(summary)[:3]
+    out = _content_questions(summary)
     if len(words) >= 15:
         seen = {q["question"] for q in out}
         gen = questions.generate(sentences(words), summary.get("keyphrases") or [], k=k, punctuated=True)
-        out += [q for q in gen if q["kind"] != "general" and q["question"] not in seen]
+        out += [q for q in gen if q["kind"] in ANCHORED and q["question"] not in seen]
     return out
 
 

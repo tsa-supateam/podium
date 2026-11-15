@@ -27,8 +27,11 @@ def test_questions_target_what_the_analysis_found(tmp_path):
     texts = [q["question"] for q in qs]
     assert len(qs) == 5
     assert texts[0] == "You said “students learn modern skills”. What evidence backs that up?"
-    assert not any("teachers save time" in t for t in texts)  # that point had support
+    # a supported point is asked why it matters, not for evidence
+    assert "You said “teachers save time grading”. Why does that matter to your audience?" in texts
+    assert not any("teachers save time" in t and "evidence" in t for t in texts)
     assert any(q["kind"] == "counter" for q in qs)
+    assert not any(q["kind"] in ("causal", "comparison", "definition", "under_explained") for q in qs)
 
 
 def test_falls_back_to_live_words_before_analysis(tmp_path):

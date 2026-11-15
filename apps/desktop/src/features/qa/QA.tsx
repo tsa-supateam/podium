@@ -11,7 +11,7 @@ const PREP_SECONDS = 10;
 const KIND: Record<string, string> = {
   statistic: "Evidence", proposal: "Risk", causal: "Cause & effect", claim: "Support", comparison: "Comparison",
   under_explained: "Go deeper", definition: "Explain it", general: "Big picture", counter: "Other side",
-  relevance: "On the prompt",
+  relevance: "On the prompt", thesis: "Your claim", commentary: "Why it matters",
 };
 
 const voiceCache = new Map<string, Promise<string>>();
