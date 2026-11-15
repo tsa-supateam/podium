@@ -178,6 +178,19 @@ export interface Summary {
   noSpeech?: boolean;
   prompt?: string;
   content?: { score: number | null; prompt: string; parts: Record<string, any> };
+  /** Plain-language read of the argument (sessions analyzed before this existed don't have it). */
+  overview?: {
+    text: string;
+    summary?: string;
+    /** Each scored 1-5 with plain-language feedback. */
+    dimensions?: Record<"structure" | "evidence" | "commentary", { score: number; feedback: string[] }>;
+    lines?: string[];
+    thesis: { text: string; t: number } | null;
+    points: { text: string; t: number; support: string[] }[];
+    concluded: boolean;
+    counterargument: boolean;
+    persuasive: boolean;
+  } | null;
   qaRound?: { sessionId: string; question: string; onTopic: boolean; mentioned: string[]; durationSec: number; wpm: number; fillers: number; words: number }[];
 }
 

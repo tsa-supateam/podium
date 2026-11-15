@@ -154,6 +154,7 @@ export default function Debrief() {
       <div className="grid" style={{ alignContent: "start" }}>
         {tab === "overview" && (
           <>
+            {s.overview && <ArgumentCard o={s.overview} onSeek={seek} />}
             <div className="side-by-side">
               {s.content && <ContentCard s={s} coach={coach} answers={bundle.answers ?? []} />}
               <DeliveryCard s={s} coach={coach} />
@@ -451,6 +452,105 @@ function TranscriptTab({ bundle, now, onSeek }: { bundle: SessionBundle; now: nu
 }
 
 
+const SUPPORT_LABEL: Record<string, string> = {
+  stat: "Statistic",
+  source: "Source",
+  story: "Personal story",
+  example: "Example",
+  hypothetical: "Hypothetical",
+};
+
+const DIMENSIONS: { key: "structure" | "evidence" | "commentary"; title: string; what: string }[] = [
+  { key: "structure", title: "Structure", what: "Claim up front, signposted points, a conclusion that ties back" },
+  { key: "evidence", title: "Evidence", what: "Stats and sources score highest; stories and examples alone top out at 3" },
+  { key: "commentary", title: "Commentary", what: "Explaining how your evidence proves your point, why it matters, and answering the other side" },
+];
+const RATING = ["", "Missing", "Weak", "Developing", "Strong", "Excellent"];
+
+function Rating({ score }: { score: number }) {
+  const color = score >= 4 ? "var(--good)" : score === 3 ? "var(--accent)" : "var(--bad)";
+  return (
+    <span className="rating" aria-label={`${score} out of 5`}>
+      <span className="rating-dots">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <span key={i} className="dot" style={i <= score ? { background: color, borderColor: color } : undefined} />
+        ))}
+      </span>
+      <b style={{ color }}>{score}/5</b>
+      <span className="muted small">{RATING[score]}</span>
+    </span>
+  );
+}
+
+/** What the speech argued, then Structure / Evidence / Commentary rated 1-5 with feedback, then its outline. */
+function ArgumentCard({ o, onSeek }: { o: NonNullable<Summary["overview"]>; onSeek: (t: number) => void }) {
+  const ordinal = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth"];
+  const dims = o.dimensions;
+  return (
+    <section className="card argument-card">
+      <h3>Overview</h3>
+      {dims ? (
+        <>
+          <p className="argument-summary">{o.summary}</p>
+          <div className="dimensions">
+            {DIMENSIONS.map((d) => (
+              <div className="dimension" key={d.key} title={d.what}>
+                <div className="dim-head">
+                  <span className="dim-title">{d.title}</span>
+                  <Rating score={dims[d.key].score} />
+                </div>
+                <ul>
+                  {dims[d.key].feedback.map((f, i) => <li key={i}>{f}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="argument-text">
+          {(o.lines?.length ? o.lines : [o.text]).map((l, i) => <p key={i}>{l}</p>)}
+        </div>
+      )}
+      {(o.thesis || o.points.length > 0) && (
+        <ol className="argument-outline">
+          {o.thesis && (
+            <li>
+              <span className="ao-label">{o.persuasive ? "Claim" : "Main idea"}</span>
+              <span className="ao-text">{o.thesis.text}</span>
+              <TimeChip t={o.thesis.t} onSeek={onSeek} />
+            </li>
+          )}
+          {o.points.map((p, i) => (
+            <li key={i}>
+              <span className="ao-label">{ordinal[i] ?? `#${i + 1}`} point</span>
+              <span className="ao-text">
+                {p.text}{" "}
+                {p.support.length ? (
+                  p.support.map((k) => (
+                    <span key={k} className={`tag ${k === "stat" || k === "source" ? "good" : ""}`}>{SUPPORT_LABEL[k] ?? k}</span>
+                  ))
+                ) : (
+                  <span className="tag bad">No support</span>
+                )}
+              </span>
+              <TimeChip t={p.t} onSeek={onSeek} />
+            </li>
+          ))}
+          <li>
+            <span className="ao-label">Conclusion</span>
+            <span className="ao-text">
+              {o.concluded ? <span className="tag good">✓ Wrapped up</span> : <span className="tag bad">Missing</span>}
+              {o.persuasive && (
+                o.counterargument ? <span className="tag good">✓ Addressed the other side</span> : <span className="tag">Other side not addressed</span>
+              )}
+            </span>
+          </li>
+        </ol>
+      )}
+    </section>
+  );
+}
+
 function Level({ v, coach }: { v: number | null | undefined; coach: boolean }) {
   if (v == null) return <b className="muted">–</b>;
   const lvl = coachLevel(v);
@@ -462,7 +562,7 @@ function contentDetail(key: string, part: any): string {
     case "relevance":
       return `${part.covered.length} of ${part.terms.length} key ideas` + (part.missing.length ? ` · missing ${part.missing.slice(0, 3).map((w: string) => `“${w}”`).join(", ")}` : "");
     case "evidence":
-      return `${part.count} number${part.count === 1 ? "" : "s"}, example${part.count === 1 ? "" : "s"} or source${part.count === 1 ? "" : "s"}`;
+      return `${part.count} piece${part.count === 1 ? "" : "s"} of support` + (part.count && part.hard === false ? " · stories/examples only" : "");
     case "directness":
       return part.total ? `${part.total} hedges · ${part.top.map(([h, c]: [string, number]) => `“${h}” ×${c}`).join(", ")}` : "No hedging";
     case "clarity":

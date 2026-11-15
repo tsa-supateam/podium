@@ -55,9 +55,20 @@ def relevance(prompt: str, text: str) -> tuple[float, dict] | None:
 
 
 def evidence(sents: list[Sentence], minutes: float) -> tuple[float, dict]:
-    hits = [s.text for s in sents if EVIDENCE.search(s.text) or STAT.search(s.text) or re.search(r"\d", s.text)]
-    need = max(1.0, 1.5 * minutes)  # about one number, example or source every 40 s
-    return _clip(len(hits) / need), {"count": len(hits), "examples": [strip_fillers(h)[:90] for h in hits[:3]]}
+    from .argument import HARD, clean, support_kinds
+
+    hits, hard = [], False
+    for s in sents:
+        kinds = support_kinds(clean(s.text))
+        number = bool(STAT.search(s.text) or re.search(r"\d", s.text))
+        if kinds or number or EVIDENCE.search(s.text):
+            hits.append(s.text)
+            hard = hard or number or bool(set(kinds) & HARD)
+    need = max(1.0, 1.5 * minutes)  # about one number, example, story or source every 40 s
+    score = _clip(len(hits) / need)
+    if not hard:
+        score = min(score, 0.6)  # stories and examples alone show one case each: never full marks
+    return score, {"count": len(hits), "hard": hard, "examples": [strip_fillers(h)[:90] for h in hits[:3]]}
 
 
 def directness(text: str, n_words: int) -> tuple[float, dict]:
@@ -171,9 +182,12 @@ def tips(c: dict, minutes: float) -> list[dict]:
             "Before you start, pick the prompt's three key words and use each one in your talk.")
     if "evidence" in p and p["evidence"]["score"] < 70:
         n = p["evidence"]["count"]
+        soft = n and not p["evidence"].get("hard", True)
         add("CONTENT_EVIDENCE", "evidence",
             f"You backed up your points {n} time{'s' if n != 1 else ''} in {max(1, round(minutes))} minute"
-            f"{'s' if round(minutes) != 1 else ''}. Give each main point a number, an example or a source.",
+            f"{'s' if round(minutes) != 1 else ''}"
+            + (", but only with stories or examples. Add a number or a source to show it holds generally."
+               if soft else ". Give each main point a number, an example or a source."),
             "For each main point, prepare one fact and one quick real-life example.")
     if "directness" in p and p["directness"]["score"] < 70:
         top = ", ".join(f"“{h}” ×{c}" for h, c in p["directness"]["top"])

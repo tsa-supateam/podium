@@ -366,3 +366,25 @@ h3 { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: upp
 .side-by-side { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 .side-by-side > .card { margin: 0; }
 @media (max-width: 900px) { .side-by-side { grid-template-columns: 1fr; } }
+
+/* argument overview: plain-language read of what the speech argued */
+.argument-card { margin-top: 16px; border-left: 3px solid var(--accent); }
+.argument-card h3 { margin: 0 0 8px; }
+.argument-text { font-size: 15px; line-height: 1.55; margin: 0 0 14px; color: var(--text); }
+.argument-text p { margin: 0 0 8px; }
+.argument-text p:first-child { font-size: 16px; font-weight: 600; }
+.argument-outline { list-style: none; margin: 0; padding: 12px 0 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.argument-outline li { display: grid; grid-template-columns: 96px 1fr auto; gap: 10px; align-items: baseline; font-size: 13px; }
+.ao-label { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.ao-text .tag { margin-left: 4px; vertical-align: 1px; }
+.ao-text .tag:first-child { margin-left: 0; }
+@media (max-width: 640px) { .argument-outline li { grid-template-columns: 1fr auto; } .ao-label { grid-column: 1 / -1; } }
+.argument-summary { font-size: 16px; font-weight: 600; line-height: 1.5; margin: 0 0 14px; }
+.dimensions { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.dimension { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--panel-2); }
+.dim-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.dim-title { font-weight: 700; font-size: 15px; }
+.rating { display: inline-flex; align-items: center; gap: 6px; }
+.rating-dots { display: inline-flex; gap: 3px; }
+.rating .dot { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--faint); display: inline-block; }
+.dimension ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.5; }

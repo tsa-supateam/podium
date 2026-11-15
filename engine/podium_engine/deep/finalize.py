@@ -16,8 +16,8 @@ from pathlib import Path
 
 from .. import config as cfgmod
 from .. import tts
+from ..nlp import argument, debrief
 from ..nlp import content as content_mod
-from ..nlp import debrief
 from ..nlp.text import sentences
 from ..realtime.pace import Word
 from ..storage import Index, write_json
@@ -73,6 +73,9 @@ def finalize(session_dir: Path, base: dict, words: list[Word], meta: dict, answe
     c = content_mod.analyze(words, sents, full_text, duration + sum(a["durationSec"] for a in usable),
                             prompt=prompt, answers=usable, keyphrases=base.get("keyphrases"))
     summary["content"] = c
+    # plain-language Structure / Evidence / Commentary read of the speech (Q&A answers add evidence)
+    summary["overview"] = None if is_answer else argument.overview(
+        sents, duration, prompt, base.get("keyphrases"), answers=[a["text"] for a in usable])
 
     # delivery: speech and answers together, weighted by how long each lasted
     sc = base["scores"]
