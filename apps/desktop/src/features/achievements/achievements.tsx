@@ -24,8 +24,8 @@ export const CATEGORIES: Category[] = ["overall", "structure", "evidence", "comm
 export const SPEECH_TYPES: SpeechType[] = ["prepared", "impromptu"];
 
 const TIER_INFO: Record<Tier, { name: string; light: string; dark: string; ink: string }> = {
-  wood: { name: "Wood", light: "#e6cfa4", dark: "#a07b4c", ink: "#4a3216" },
-  bronze: { name: "Bronze", light: "#e7a467", dark: "#8c4f1d", ink: "#4a2508" },
+  wood: { name: "Wood", light: "#c49a6c", dark: "#6b4423", ink: "#3d2410" },
+  bronze: { name: "Bronze", light: "#f4a362", dark: "#9b4a12", ink: "#4a2508" },
   silver: { name: "Silver", light: "#eef2f6", dark: "#8a95a3", ink: "#3b4450" },
   gold: { name: "Gold", light: "#ffe27a", dark: "#c08a0c", ink: "#5a3e00" },
   diamond: { name: "Diamond", light: "#e6fbff", dark: "#43b3e6", ink: "#0b4a66" },
@@ -63,47 +63,54 @@ export function useAchievements(): Achievement[] | null {
   return list;
 }
 
-/** Medal for wood to gold, a cut gem for diamond. Locked badges are grey outlines. */
+/** A round coin: tier-metal rim, dark face, the track's symbol. Diamond adds facets and sparkle.
+ *  Locked coins are plain grey, like an unminted blank. */
 export function Badge({ tier, category, size = 56, locked = false }: { tier: Tier; category: Category; size?: number; locked?: boolean }) {
   const t = TIER_INFO[tier];
-  const id = `g-${tier}-${category}-${locked ? "l" : "u"}`;
-  const fill = locked ? "var(--line)" : `url(#${id})`;
-  const ink = locked ? "var(--faint)" : t.ink;
+  const id = `c-${tier}-${category}-${locked ? "l" : "u"}-${size}`;
+  const rimA = locked ? "#d9dde3" : t.light, rimB = locked ? "#9aa1ab" : t.dark;
+  const glyph = locked ? "#a7adb6" : t.light;
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={`${t.name} ${CATEGORY_INFO[category].name}${locked ? " (locked)" : ""}`}>
       <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor={t.light} />
-          <stop offset="1" stopColor={t.dark} />
+        <linearGradient id={`${id}-rim`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor={rimA} />
+          <stop offset="0.5" stopColor={rimB} />
+          <stop offset="1" stopColor={rimA} />
         </linearGradient>
+        <radialGradient id={`${id}-face`} cx="0.4" cy="0.35" r="0.75">
+          <stop offset="0" stopColor={locked ? "#f2f4f7" : "#3a4256"} />
+          <stop offset="1" stopColor={locked ? "#c9ced6" : "#151a26"} />
+        </radialGradient>
       </defs>
-      {tier === "diamond" ? (
-        <g stroke={locked ? "var(--faint)" : "#ffffff"} strokeOpacity={locked ? 0.5 : 0.7} strokeWidth="1.2" strokeLinejoin="round">
-          <polygon points="14,8 50,8 62,24 32,60 2,24" fill={fill} />
-          <polyline points="2,24 62,24" fill="none" />
-          <polyline points="14,8 22,24 32,60 42,24 50,8" fill="none" />
-          <polyline points="22,24 32,8 42,24" fill="none" />
-        </g>
-      ) : (
-        <g>
-          <polygon points="32,2 58,17 58,47 32,62 6,47 6,17" fill={fill} stroke={locked ? "var(--faint)" : t.dark} strokeWidth="2" />
-          {tier === "wood" && !locked && (
-            <g stroke="#6e4f2a" strokeOpacity="0.55" strokeWidth="1.3" fill="none">
-              <path d="M12 22c10 4 30 -4 40 2" />
-              <path d="M10 34c12 5 32 -5 44 1" />
-              <path d="M12 45c10 3 28 -3 40 1" />
-            </g>
-          )}
-          <circle cx="32" cy="32" r="17" fill="none" stroke={ink} strokeOpacity="0.35" strokeWidth="1.5" />
+      <circle cx="32" cy="32" r="30" fill={`url(#${id}-rim)`} />
+      <circle cx="32" cy="32" r="23.5" fill={`url(#${id}-face)`} stroke={locked ? "#b7bdc6" : t.dark} strokeWidth="1.5" />
+      {tier === "wood" && !locked && (
+        <g stroke="#6e4f2a" strokeOpacity="0.5" strokeWidth="1.1" fill="none">
+          <path d="M6 24c3-1 5 1 7 0" /><path d="M51 40c3 1 5-1 7 0" /><path d="M9 46c2 0 3 2 5 1" />
         </g>
       )}
-      <text x="32" y={tier === "diamond" ? 33 : 39} textAnchor="middle" fontSize={tier === "diamond" ? 15 : 19}
-        fontWeight="700" fill={ink}>
+      {tier === "diamond" && !locked && (
+        <g fill="#ffffff">
+          <path d="M50 6l1.5 4 4 1.5-4 1.5-1.5 4-1.5-4-4-1.5 4-1.5z" />
+          <path d="M11 47l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z" opacity="0.8" />
+        </g>
+      )}
+      <text x="32" y="39.5" textAnchor="middle" fontSize="20" fontWeight="700" fill={glyph}>
         {CATEGORY_INFO[category].glyph}
       </text>
     </svg>
   );
 }
+
+const Lock = () => (
+  <span className="ach-lock" aria-hidden>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+      <rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor" stroke="none" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  </span>
+);
 
 /** Shown once when a run's results open, for the best achievement it earned. */
 export function AchievementBanner({ sessionId }: { sessionId: string }) {
@@ -136,42 +143,90 @@ export function AchievementBanner({ sessionId }: { sessionId: string }) {
   );
 }
 
-/** History tab: every achievement, earned or locked, per speech type. */
+/** History tab: a collection of every achievement, earned or locked, one section per track. */
 export function AchievementsView() {
   const list = useAchievements();
+  const [kind, setKind] = useState<SpeechType>("prepared");
   if (!list) return <div className="spinner" />;
   const byId = new Map(list.map((a) => [a.id, a]));
+  const total = SPEECH_TYPES.length * CATEGORIES.length * TIERS.length;
+  const top = best(list);
+  const latestAt = list.reduce<string | null>((m, a) => (a.at && (!m || a.at > m) ? a.at : m), null);
+  const latest = best(list.filter((a) => a.at === latestAt));
+  const bestLevel = (cat: Category) =>
+    Math.max(0, ...list.filter((a) => a.speechType === kind && a.category === cat).map((a) => a.level));
   return (
-    <div className="grid">
-      <p className="muted">
-        Earn a tier the first time a run reaches that level: the overall star rating, or the Structure, Evidence and
-        Commentary ratings (#/5) in the Overview. Prepared and on-the-spot speeches are tracked separately.
-        {" "}{list.length} of {SPEECH_TYPES.length * CATEGORIES.length * TIERS.length} earned.
-      </p>
-      {SPEECH_TYPES.map((kind) => (
-        <section className="card" key={kind}>
-          <h3>{SPEECH_TYPE_NAME[kind]}</h3>
-          <div className="ach-table">
-            {CATEGORIES.map((cat) => (
-              <div className="ach-row" key={cat}>
-                <span className="ach-cat">{CATEGORY_INFO[cat].name}</span>
-                {TIERS.map((tier, i) => {
-                  const a = byId.get(`${kind}:${cat}:${tier}`);
-                  const rule = achievementRule({ category: cat, level: i + 1, speechType: kind });
-                  return (
-                    <button key={tier} className={`ach-cell ${a ? "on" : ""}`} disabled={!a}
-                      title={a ? `${rule}. Earned ${a.at ? new Date(a.at).toLocaleDateString() : ""} in “${a.title}”` : `Locked: ${rule}`}
-                      onClick={() => a && void openSession(a.sessionId)}>
-                      <Badge tier={tier} category={cat} size={44} locked={!a} />
-                      <span className="small">{TIER_INFO[tier].name}</span>
-                    </button>
-                  );
-                })}
-              </div>
+    <div className="ach-page">
+      <section className="ach-hero">
+        <div className="ach-hero-badge">
+          {top ? <Badge tier={top.tier} category={top.category} size={112} /> : <Badge tier="wood" category="overall" size={112} locked />}
+          <span className="spark s1">✦</span><span className="spark s2">✦</span><span className="spark s3">✦</span>
+        </div>
+        <div className="ach-hero-text">
+          <h2>Collection</h2>
+          <span className="muted">{list.length} of {total} unlocked</span>
+          <div className="segmented ach-kind" role="radiogroup" aria-label="Speech type">
+            {SPEECH_TYPES.map((k) => (
+              <button key={k} role="radio" aria-checked={kind === k} className={kind === k ? "on" : ""} onClick={() => setKind(k)}>
+                {SPEECH_TYPE_NAME[k]}
+              </button>
             ))}
           </div>
-        </section>
-      ))}
+        </div>
+        {latest && (
+          <div className="ach-latest">
+            <span className="muted small">Latest unlock</span>
+            <button className="ach-latest-card" onClick={() => void openSession(latest.sessionId)}>
+              <Badge tier={latest.tier} category={latest.category} size={44} />
+              <span>
+                <b>{achievementName(latest)}</b>
+                <span className="small">{SPEECH_TYPE_NAME[latest.speechType]} · {latest.at ? new Date(latest.at).toLocaleDateString() : ""}</span>
+              </span>
+            </button>
+          </div>
+        )}
+      </section>
+
+      {CATEGORIES.map((cat) => {
+        const lvl = bestLevel(cat);
+        return (
+          <section key={cat} className="ach-section">
+            <div className="ach-section-head">
+              <h3>{CATEGORY_INFO[cat].name}</h3>
+              <span className="muted small">{lvl} of {TIERS.length}</span>
+            </div>
+            <div className="ach-cards">
+              {TIERS.map((tier, i) => {
+                const a = byId.get(`${kind}:${cat}:${tier}`);
+                const isBest = !!a && i + 1 === lvl;
+                return (
+                  <button key={tier} className={`ach-card ${a ? "earned" : "locked"} ${isBest ? "best" : ""}`}
+                    disabled={!a} onClick={() => a && void openSession(a.sessionId)}
+                    title={a ? `Earned in “${a.title}”. Click to open that run.` : undefined}>
+                    {a && a.at === latestAt && <span className="ach-new">New</span>}
+                    {!a && <Lock />}
+                    <Badge tier={tier} category={cat} size={84} locked={!a} />
+                    <b className="ach-card-name">{achievementName({ tier, category: cat })}</b>
+                    <span className="ach-card-rule">{achievementRule({ category: cat, level: i + 1, speechType: kind })}</span>
+                    <span className="ach-card-foot">
+                      {a ? (
+                        <span className="ach-earned">✓ {isBest ? "Best so far" : "Earned"}{a.at ? ` · ${new Date(a.at).toLocaleDateString()}` : ""}</span>
+                      ) : lvl > 0 ? (
+                        <>
+                          <span className="ach-bar"><span style={{ width: `${(lvl / (i + 1)) * 100}%` }} /></span>
+                          <span className="small">{lvl} of {i + 1}{cat === "overall" ? "★" : ""}</span>
+                        </>
+                      ) : (
+                        <span className="small">Not earned yet</span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }

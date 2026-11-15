@@ -417,11 +417,41 @@ h3 { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: upp
 .achievement-banner.tier-diamond { border-color: #6cc9f0; box-shadow: 0 0 24px #6cc9f055, 0 10px 30px #0006; }
 @keyframes ach-in { from { transform: translateY(-16px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .achievement-banner { animation: none; } }
-.ach-table { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.ach-row { display: grid; grid-template-columns: 110px repeat(5, 1fr); align-items: center; gap: 8px; }
-.ach-cat { font-weight: 600; }
-.ach-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 10px;
-  background: none; border: 1px solid transparent; color: var(--faint); cursor: default; }
-.ach-cell.on { color: var(--text); cursor: pointer; }
-.ach-cell.on:hover { border-color: var(--line); background: #ffffff08; }
-@media (max-width: 640px) { .ach-row { grid-template-columns: 1fr repeat(5, 44px); } .history-tabs { width: auto; } }
+.ach-page { display: flex; flex-direction: column; gap: 28px; }
+.ach-hero { display: grid; grid-template-columns: auto 1fr auto; gap: 24px; align-items: center; padding: 24px 28px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 12px 32px #0005; }
+.ach-hero-badge { position: relative; padding: 14px; border-radius: 50%;
+  background: radial-gradient(circle, #ffd38a33 0%, #ffd38a10 55%, transparent 72%); }
+.ach-hero-badge .spark { position: absolute; color: var(--accent-2); font-size: 14px; }
+.ach-hero-badge .s1 { top: 4px; left: 2px; } .ach-hero-badge .s2 { top: 16px; right: -2px; font-size: 18px; } .ach-hero-badge .s3 { bottom: 6px; right: 8px; font-size: 11px; }
+.ach-hero-text { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.ach-hero-text h2 { margin: 0; font-size: 30px; }
+.ach-kind { width: 260px; margin-top: 6px; }
+.ach-latest { display: flex; flex-direction: column; gap: 6px; }
+.ach-latest-card { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 14px; text-align: left;
+  border: 1px solid #6aa9ff44; background: #6aa9ff14; color: var(--text); cursor: pointer; }
+.ach-latest-card span { display: flex; flex-direction: column; }
+.ach-latest-card .small { color: var(--accent); }
+.ach-section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.ach-section-head h3 { margin: 0; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--text); }
+.ach-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.ach-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 18px 16px 16px;
+  border-radius: 16px; background: var(--panel); border: 2px solid transparent; color: var(--text); text-align: left; font: inherit; }
+.ach-card > svg { align-self: center; margin-bottom: 8px; }
+.ach-card.earned { cursor: pointer; }
+.ach-card.earned:hover { border-color: var(--line); }
+.ach-card.best { border-color: var(--info); }
+.ach-card.locked, .ach-card:disabled { cursor: default; opacity: 1; }
+.ach-card.locked .ach-card-name { color: var(--muted); }
+.ach-card-name { font-size: 15px; }
+.ach-card-rule { font-size: 13px; color: var(--muted); min-height: 2.6em; }
+.ach-card-foot { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: auto; color: var(--muted); }
+.ach-earned { color: var(--info); font-size: 13px; font-weight: 600; }
+.ach-bar { display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.ach-bar span { display: block; height: 100%; background: var(--info); border-radius: 3px; }
+.ach-lock { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: #0f1830; color: #fff; border: 1px solid var(--line); }
+.ach-new { position: absolute; top: 10px; left: 10px; padding: 2px 9px; border-radius: 999px; background: var(--accent); color: #2a1a00;
+  font-size: 11px; font-weight: 700; }
+@media (max-width: 1100px) { .ach-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .ach-hero { grid-template-columns: 1fr; justify-items: start; } .ach-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ach-kind { width: 100%; } }
