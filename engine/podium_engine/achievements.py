@@ -51,7 +51,8 @@ def earned() -> list[dict]:
     root = sessions_dir()
     for d in sorted(p for p in root.iterdir() if p.is_dir()) if root.exists() else []:
         meta, summary = _load(d / "session.json"), _load(d / "summary.json")
-        if not meta or not summary or meta.get("mode") in ("qa", "replay") or meta.get("status") != "analyzed":
+        if (not meta or not summary or meta.get("mode") in ("qa", "replay") or meta.get("status") != "analyzed"
+                or meta.get("drill")):  # Learn practices are short exercises, not full speeches
             continue
         kind = "impromptu" if meta.get("speechType") == "impromptu" else "prepared"
         for cat, lvl in levels(summary).items():

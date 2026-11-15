@@ -10,6 +10,7 @@ import Live from "./features/live/Live";
 import Analyzing from "./features/live/Analyzing";
 import Debrief from "./features/debrief/Debrief";
 import QA from "./features/qa/QA";
+import Learn from "./features/learn/Learn";
 import { stopSession } from "./features/live/session";
 
 /** Open a session's debrief. A session that was recorded but never analyzed gets analyzed now
@@ -139,6 +140,7 @@ export default function App() {
           <>
             {screen === "home" && <Home />}
             {screen === "history" && <History />}
+            {screen === "learn" && <Learn />}
             {screen === "setup" && <Setup />}
             {screen === "calibrate" && <Calibration />}
             {screen === "live" && <Live />}
@@ -164,6 +166,10 @@ function TopBar() {
       <nav className="nav">
         <button className={screen === "home" ? "active" : ""} disabled={inSession} onClick={() => go("home")}>
           Home
+        </button>
+        <button className={screen === "learn" ? "active" : ""} disabled={inSession}
+          onClick={() => { useApp.getState().set({ learnPath: { module: null, skill: null } }); go("learn"); }}>
+          Learn
         </button>
         <button className={screen === "history" ? "active" : ""} disabled={inSession} onClick={() => go("history")}>
           History

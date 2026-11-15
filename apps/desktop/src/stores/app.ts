@@ -4,7 +4,15 @@ import { useEffect, useState } from "react";
 import { DEFAULT_GAINS, DEFAULT_ZONE_MODEL, type GazeCalibrationGains, type ZoneModel } from "../lib/gaze";
 import type { EngagementTick, FillerEventMsg, GazeSample, PaceTick, Question, SessionBundle } from "../lib/types";
 
-export type Screen = "home" | "setup" | "calibrate" | "live" | "qa" | "analyzing" | "debrief" | "history";
+export type Screen = "home" | "setup" | "calibrate" | "live" | "qa" | "analyzing" | "debrief" | "history" | "learn";
+
+/** A Learn practice in progress: a short run checked against one skill. */
+export interface Drill {
+  skill: string;
+  check: string;
+  prompt: string;
+  seconds: number;
+}
 
 export interface QARound {
   parentId: string;
@@ -52,6 +60,8 @@ interface AppState {
   paused: boolean;
   /** Background analysis progress of the main speech (shown during Q&A). */
   mainAnalysis: { stage: string; pct: number; done: boolean } | null;
+  drill: Drill | null;
+  learnPath: { module: string | null; skill: string | null };
   toast: string | null;
   set: (p: Partial<AppState>) => void;
   setSettings: (p: Partial<Settings>) => void;
@@ -96,6 +106,8 @@ export const useApp = create<AppState>((set, get) => ({
   qa: null,
   paused: false,
   mainAnalysis: null,
+  drill: null,
+  learnPath: { module: null, skill: null },
   toast: null,
   set: (p) => set(p),
   setSettings: (p) => {
@@ -107,7 +119,8 @@ export const useApp = create<AppState>((set, get) => ({
     }
     set({ settings });
   },
-  go: (screen) => set({ screen }),
+  // leaving for Home, History or Learn ends a practice that never started
+  go: (screen) => set(screen === "home" || screen === "history" || screen === "learn" ? { screen, drill: null } : { screen }),
 }));
 
 /** High-frequency live data. Written by event handlers, read by animation loops / throttled hooks. */

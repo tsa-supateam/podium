@@ -5,6 +5,7 @@ import { CATEGORIES, randomPrompt } from "../../lib/prompts";
 import { zoneNames } from "../../lib/types";
 import { live, SPEED_BANDS, useApp, useTicker } from "../../stores/app";
 import { startSession } from "../live/session";
+import { skillById } from "../learn/curriculum";
 
 export default function Setup() {
   const { settings, setSettings, go, calibrated, set } = useApp();
@@ -53,11 +54,12 @@ export default function Setup() {
   };
 
   const camera = settings.gazeMode === "camera";
+  const drill = useApp((s) => s.drill);
   return (
     <div className="page">
-      <h1 style={{ marginBottom: 18 }}>Set up your practice run</h1>
+      <h1 style={{ marginBottom: 18 }}>{drill ? "Set up your practice" : "Set up your practice run"}</h1>
 
-      <PromptPicker />
+      {drill ? <DrillCard /> : <PromptPicker />}
 
       <div className="setup">
         <div className="grid" style={{ alignContent: "start" }}>
@@ -142,7 +144,7 @@ export default function Setup() {
                 ? "Glancing down at notes is expected. Looks over 5 s count against you."
                 : "Looking down counts as looking away. Target: 85% eye contact."}
             />
-            <div className="row">
+            {!drill && <div className="row">
               <div className="field" style={{ flex: 1 }}>
                 <label>Target length (minutes)</label>
                 <input
@@ -153,7 +155,7 @@ export default function Setup() {
                   onChange={(e) => setSettings({ targetMinutes: e.target.value ? Number(e.target.value) : null })}
                 />
               </div>
-            </div>
+            </div>}
             <div className="field">
               <label>Microphone</label>
               <select
@@ -219,6 +221,27 @@ function Toggle({ label, value, options, onChange, hint }: {
       </div>
       <span className="muted small">{hint}</span>
     </div>
+  );
+}
+
+/** A Learn practice replaces the prompt picker: fixed prompt, fixed length, one skill to show. */
+function DrillCard() {
+  const { drill, set, go } = useApp();
+  const skill = drill ? skillById(drill.skill) : null;
+  if (!drill || !skill) return null;
+  return (
+    <section className="card drill-card">
+      <span className="muted small">Practice · {skill.module.title} · {drill.seconds} s</span>
+      <b className="drill-title">{skill.title}</b>
+      <p>{skill.practice.instruction}</p>
+      <div className="practice-prompt"><span className="muted small">Your prompt</span><b>{drill.prompt}</b></div>
+      <p className="small"><span className="muted">To pass:</span> {skill.practice.target}</p>
+      <div className="row">
+        <button className="link-btn" onClick={() => { set({ learnPath: { module: skill.module.id, skill: skill.id } }); go("learn"); }}>
+          ← Back to the lesson
+        </button>
+      </div>
+    </section>
   );
 }
 

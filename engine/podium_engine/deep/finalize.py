@@ -128,6 +128,10 @@ def finalize(session_dir: Path, base: dict, words: list[Word], meta: dict, answe
         deb = debrief.build(summary, keyphrase_at, extra_growth=content_mod.tips(c, minutes), skip=covered,
                             extra_strengths=content_mod.strengths(c))
     summary["debrief"] = deb
+    if meta.get("drill"):  # a Learn practice: did it pass its skill's check?
+        from .. import learn
+
+        summary["drill"] = learn.evaluate(meta["drill"], summary)
     (session_dir / "debrief.txt").write_text(deb["text"] + "\n")
     if with_tts and not is_answer and tts.available():
         try:

@@ -140,6 +140,14 @@ class Server:
             await self.start_session(ev, d)
         elif t == "session.stop":
             await self.stop_session(ev)
+        elif t == "learn.status":
+            from .. import learn
+
+            await self.reply(ev, "learn", learn.status())
+        elif t == "learn.lesson":
+            from .. import learn
+
+            await self.reply(ev, "learn", {"lessons": learn.mark_lesson(str(d["lessonId"])[:80], bool(d.get("done", True)))})
         elif t == "achievements.list":
             from .. import achievements
 
@@ -184,6 +192,10 @@ class Server:
                  "difficulty": "judge" if d.get("difficulty") in ("judge", "assessment") else "coach",
                  "gazeMode": "camera" if d.get("gazeMode") == "camera" else "room",
                  "prompt": str(d.get("prompt") or "")[:400]}
+        from .. import learn
+
+        if d.get("drill") in learn.CHECKS:  # a Learn practice: checked against one skill
+            extra["drill"] = d["drill"]
         title = d.get("title") or "Practice run"
         replay_from = d.get("replaySessionId")
         mode = "replay" if replay_from else d.get("mode", "practice")

@@ -5,6 +5,8 @@ import { useApp } from "../../stores/app";
 import { CONTENT_PARTS, DELIVERY_METRICS, OVERALL_HOW, TOP_METRICS, clusteringWord, coachLevel, firstSentence, speedChangeWord, steadinessWord, strengthLine, stripDrillLabel, voiceWord } from "../../lib/metrics";
 import { keyMoments } from "../../lib/moments";
 import { AchievementBanner } from "../achievements/achievements";
+import { DrillResult } from "../learn/Learn";
+import { SKILL_FOR_METRIC, skillById } from "../learn/curriculum";
 import { EngagementChart, GazeHeatmap, ScoreRing, Timeline, ZoneBars, engagementHeadline, scoreColor } from "./charts";
 
 type Tab = "overview" | "timeline" | "gaze" | "transcript";
@@ -85,7 +87,8 @@ export default function Debrief() {
 
   return (
     <div className="page debrief">
-      {sid && bundle.session?.mode !== "replay" && <AchievementBanner sessionId={sid} />}
+      {s.drill && <DrillResult drill={s.drill} />}
+      {sid && bundle.session?.mode !== "replay" && !s.drill && <AchievementBanner sessionId={sid} />}
       <div className="row debrief-title">
         <div>
           <h1>{s.title || "Debrief"}</h1>
@@ -259,6 +262,21 @@ function Progress({ sessionId, overall, coach }: { sessionId: string; overall: n
   return <span className="progress-note">{delta === 0 ? "Same as last run" : `${delta} vs last run`}</span>;
 }
 
+/** "Learn this" for a tip: opens the Learn skill that trains that exact score. */
+function LearnLink({ metric }: { metric: string }) {
+  const skill = SKILL_FOR_METRIC[metric] ? skillById(SKILL_FOR_METRIC[metric]) : null;
+  if (!skill) return null;
+  const open = () => {
+    useApp.getState().set({ learnPath: { module: skill.module.id, skill: skill.id } });
+    useApp.getState().go("learn");
+  };
+  return (
+    <button className="learn-link" onClick={open}>
+      📘 Learn this: {skill.module.title} › {skill.title}
+    </button>
+  );
+}
+
 function FixNext({ s, coach, onSeek, onPlay, speaking, canPlay }: {
   s: Summary;
   coach: boolean;
@@ -299,6 +317,7 @@ function FixNext({ s, coach, onSeek, onPlay, speaking, canPlay }: {
                   <span className="try-label">Try:</span> {stripDrillLabel(drill)}
                 </p>
               )}
+              <LearnLink metric={g.metric} />
             </li>
           );
         })}
