@@ -1,6 +1,7 @@
 // Coach-mode cue word at the bottom of the stage: one short instruction at a time.
 import { useRef } from "react";
 import { live, SPEED_BANDS, useApp, useTicker } from "../../stores/app";
+import { Corners } from "../../ui/kit";
 
 export interface CueInput {
   now: number; // seconds (performance clock)
@@ -93,6 +94,7 @@ export default function CueWord() {
   if (!cue) return null;
   return (
     <div className={`cue ${cue.tone}`} key={cue.text} role="status" aria-live="polite">
+      <Corners />
       {cue.text}
     </div>
   );

@@ -8,6 +8,8 @@ import { useApp } from "../../stores/app";
 import {
   MASTERY, MODULES, type LearnStatus, type Mastery, type Module, type Skill, mastery, moduleProgress, skillById,
 } from "./curriculum";
+import { Icon, MODULE_ICON } from "../../ui/icons";
+import { ScreenHeader, SegMeter, Stepper, StatTile } from "../../ui/kit";
 
 function useLearnStatus(): [LearnStatus | null, (s: LearnStatus) => void] {
   const [st, setSt] = useState<LearnStatus | null>(null);
@@ -49,11 +51,12 @@ function MasterySquares({ mod, st }: { mod: Module; st: LearnStatus | null }) {
 
 function ModuleIcon({ mod, size = 44 }: { mod: Module; size?: number }) {
   return (
-    <span className="module-icon" style={{ width: size, height: size, background: `${mod.color}22`, color: mod.color, fontSize: size * 0.45 }}>
-      {mod.glyph}
+    <span className="module-icon" style={{ width: size, height: size }} aria-hidden>
+      <Icon name={MODULE_ICON[mod.id] ?? "target"} size={Math.round(size * 0.5)} />
     </span>
   );
 }
+
 
 // ---------------------------------------------------------------- course overview
 function Course({ st }: { st: LearnStatus | null }) {
@@ -71,41 +74,29 @@ function Course({ st }: { st: LearnStatus | null }) {
   const total = Math.round(MODULES.reduce((a, m) => a + moduleProgress(m, st), 0) / MODULES.length);
 
   return (
-    <div className="page learn">
-      <div className="learn-hero">
-        <div>
-          <h1>Learn</h1>
-          <p className="muted">
-            Short lessons and practices for each thing Podium scores. Practice a skill here and it shows up in your results.
-          </p>
-        </div>
-        <div className="learn-total">
-          <b>{total}%</b>
-          <span className="muted small">course mastery</span>
-          <div className="ach-bar"><span style={{ width: `${total}%` }} /></div>
-        </div>
-      </div>
-
-      <div className="mastery-legend muted small">
-        {MASTERY.map((m, i) => (
-          <span key={m.name}><span className={`msq m${i}`} /> {m.name}</span>
-        ))}
+    <div className="page learn stagger">
+      <ScreenHeader title="Learn" />
+      <div className="tiles">
+        <StatTile value={`${total}%`} label="Course mastery" tone="signal" sub={<SegMeter value={total / 100} />} />
+        <StatTile value={MODULES.length} label="Modules" />
+        <StatTile value={st?.lessons.length ?? 0} label="Lessons read" tone="paper" />
+        <StatTile value={Object.values(st?.checks ?? {}).filter((c) => c.attempts.some((a) => a.passed)).length} label="Practices passed" tone="concrete" />
       </div>
 
       {rec && (
         <button className="learn-rec" onClick={() => nav(rec.id)}>
           <ModuleIcon mod={rec} />
           <span>
-            <span className="small learn-rec-kicker">Recommended from your last run</span>
+            <span className="learn-rec-kicker">Recommended from your last run</span>
             <b>{rec.title}</b>
             <span className="muted small">{rec.improves}</span>
           </span>
           <span className="spacer" />
-          <span className="btn primary">Start</span>
+          <span className="hero-cta-title" style={{ padding: 0, fontSize: 22 }}>Start <Icon name="arrowR" size={22} /></span>
         </button>
       )}
 
-      <div className="module-grid">
+      <div className="module-grid scroll">
         {MODULES.map((m) => {
           const pct = moduleProgress(m, st);
           return (
@@ -114,14 +105,14 @@ function Course({ st }: { st: LearnStatus | null }) {
                 <ModuleIcon mod={m} />
                 <span>
                   <b className="module-title">{m.title}</b>
-                  <span className="muted small">{m.skills.length} skills</span>
+                  <span className="micro">{String(m.skills.length).padStart(2, "0")} skills</span>
                 </span>
               </div>
               <p className="muted small module-blurb">{m.blurb}</p>
               <span className="module-improves small">Improves: {m.improves}</span>
               <div className="module-foot">
                 <MasterySquares mod={m} st={st} />
-                <span className="small muted">{pct}%</span>
+                <span className="micro">{String(pct).padStart(3, "0")}%</span>
               </div>
             </button>
           );
@@ -134,23 +125,24 @@ function Course({ st }: { st: LearnStatus | null }) {
 // ---------------------------------------------------------------- module page
 function ModulePage({ mod, st }: { mod: Module; st: LearnStatus | null }) {
   return (
-    <div className="page learn">
-      <button className="link-btn" onClick={() => nav(null)}>← All modules</button>
+    <div className="page learn stagger">
+      <ScreenHeader title={mod.title}>
+        <button className="btn ghost" onClick={() => nav(null)}><Icon name="arrowL" size={14} /> All modules</button>
+      </ScreenHeader>
       <div className="module-head">
         <ModuleIcon mod={mod} size={64} />
         <div>
-          <h1>{mod.title}</h1>
           <p className="muted">{mod.blurb}</p>
           <span className="module-improves small">Improves: {mod.improves}</span>
         </div>
         <div className="learn-total">
           <b>{moduleProgress(mod, st)}%</b>
-          <span className="muted small">module mastery</span>
+          <span className="micro">module mastery</span>
           <MasterySquares mod={mod} st={st} />
         </div>
       </div>
 
-      <div className="skill-list">
+      <div className="skill-list scroll">
         {mod.skills.map((s, i) => {
           const m = mastery(s, st);
           const c = st?.checks[s.check];
@@ -159,18 +151,18 @@ function ModulePage({ mod, st }: { mod: Module; st: LearnStatus | null }) {
           return (
             <section key={s.id} className="card skill-card">
               <div className="skill-head">
-                <span className="skill-num">{i + 1}</span>
+                <span className="skill-num">{String(i + 1).padStart(2, "0")}</span>
                 <b className="skill-title">{s.title}</b>
                 <MasteryChip m={m} />
               </div>
               <button className="skill-item" onClick={() => nav(mod.id, s.id)}>
-                <span className={`item-dot ${lessonDone ? "done" : ""}`}>{lessonDone ? "✓" : "📖"}</span>
+                <span className={`item-dot ${lessonDone ? "done" : ""}`}><Icon name={lessonDone ? "check" : "book"} size={14} /></span>
                 <span>Lesson: {s.title}</span>
                 <span className="spacer" />
                 <span className="muted small">{lessonDone ? "Read" : "2 min read"}</span>
               </button>
               <button className="skill-item" onClick={() => nav(mod.id, s.id)}>
-                <span className={`item-dot ${passed ? "done" : ""}`}>{passed ? "✓" : "🎤"}</span>
+                <span className={`item-dot ${passed ? "done" : ""}`}><Icon name={passed ? "check" : "mic"} size={14} /></span>
                 <span>Practice: {s.practice.target}</span>
                 <span className="spacer" />
                 <span className="muted small">{passed ? "Passed" : c?.attempts.length ? `${c.attempts.length} tr${c.attempts.length === 1 ? "y" : "ies"}` : `${s.practice.seconds} s`}</span>
@@ -206,14 +198,15 @@ function SkillPage({ mod, skill, st, setSt }: { mod: Module; skill: Skill; st: L
   };
 
   return (
-    <div className="page learn">
-      <button className="link-btn" onClick={() => nav(mod.id)}>← {mod.title}</button>
+    <div className="page learn stagger">
+      <ScreenHeader title={skill.title}>
+        <button className="btn ghost" onClick={() => nav(mod.id)}><Icon name="arrowL" size={14} /> {mod.title}</button>
+      </ScreenHeader>
       <div className="skill-page-head">
         <ModuleIcon mod={mod} size={52} />
-        <div>
-          <span className="muted small">{mod.title} · Skill {idx + 1} of {mod.skills.length}</span>
-          <h1>{skill.title}</h1>
-        </div>
+        <Stepper index={idx} total={mod.skills.length} label="SKILL"
+          onPrev={() => idx > 0 && nav(mod.id, mod.skills[idx - 1].id)}
+          onNext={() => next && nav(mod.id, next.id)} />
         <span className="spacer" />
         <MasteryChip m={m} />
       </div>
@@ -235,10 +228,10 @@ function SkillPage({ mod, skill, st, setSt }: { mod: Module; skill: Skill; st: L
               <p className="muted small">{L.example.why}</p>
             </div>
           )}
-          <p className="lesson-remember">💡 {L.remember}</p>
+          <p className="lesson-remember"><Icon name="idea" size={16} /> {L.remember}</p>
           <div className="row">
             {lessonDone ? (
-              <button className="btn ghost" onClick={() => void markRead(false)}>✓ Lesson complete (undo)</button>
+              <button className="btn ghost" onClick={() => void markRead(false)}><Icon name="check" size={14} /> Lesson complete (undo)</button>
             ) : (
               <button className="btn" onClick={() => void markRead(true)}>Mark lesson complete</button>
             )}
@@ -250,11 +243,11 @@ function SkillPage({ mod, skill, st, setSt }: { mod: Module; skill: Skill; st: L
             <h3>Practice</h3>
             <p>{P.instruction}</p>
             <div className="practice-prompt">
-              <span className="muted small">Your prompt · {P.seconds} s</span>
+              <span className="micro">Your prompt / {P.seconds} s</span>
               <b>{P.prompt}</b>
             </div>
             <p className="small"><span className="muted">To pass:</span> {P.target}</p>
-            <button className="btn primary big" onClick={practice}>🎤 Start practice</button>
+            <button className="btn primary big" onClick={practice}><Icon name="mic" size={14} /> Start practice <Icon name="arrowR" size={14} className="arw" /></button>
             {settings.difficulty === "judge" && <p className="muted small">Runs in Assessment mode, like your setting.</p>}
           </section>
 
@@ -274,7 +267,7 @@ function SkillPage({ mod, skill, st, setSt }: { mod: Module; skill: Skill; st: L
                   {[...c.attempts].reverse().map((a) => (
                     <li key={a.sessionId}>
                       <button className="link-btn" onClick={() => void openSession(a.sessionId)}>
-                        <span className={`tag ${a.passed ? "good" : "bad"}`}>{a.passed ? "✓ Passed" : "Not yet"}</span>
+                        <span className={`tag ${a.passed ? "good" : "bad"}`}>{a.passed ? <><Icon name="check" size={10} /> Passed</> : "Not yet"}</span>
                         <span>{fmt(a.value)}</span>
                         <span className="muted small">{a.at ? new Date(a.at).toLocaleDateString() : ""}</span>
                       </button>
@@ -284,13 +277,6 @@ function SkillPage({ mod, skill, st, setSt }: { mod: Module; skill: Skill; st: L
               </>
             )}
           </section>
-
-          {next && (
-            <button className="card learn-next" onClick={() => nav(mod.id, next.id)}>
-              <span className="muted small">Next skill</span>
-              <b>{next.title} →</b>
-            </button>
-          )}
         </aside>
       </div>
     </div>
@@ -313,16 +299,16 @@ export function DrillResult({ drill }: { drill: { id: string; value: number | nu
   };
   return (
     <section className={`card drill-result ${drill.passed ? "passed" : ""}`}>
-      <span className="drill-mark">{drill.passed ? "✓" : "↻"}</span>
+      <span className="drill-mark"><Icon name={drill.passed ? "check" : "retry"} size={22} /></span>
       <div>
-        <span className="muted small">Practice · {skill.module.title}</span>
+        <span className="micro">Practice / {skill.module.title}</span>
         <b className="drill-title">{skill.title}: {drill.passed ? "passed!" : "not yet"}</b>
         <span className="small">
           You: {drill.value == null ? "–" : P.unit ? P.unit(drill.value) : drill.value} · Target: {P.target}
         </span>
       </div>
       <span className="spacer" />
-      <button className="btn ghost" onClick={again}>Try again</button>
+      <button className="btn ghost" onClick={again}><Icon name="retry" size={14} /> Try again</button>
       <button className="btn primary" onClick={back}>Back to skill</button>
     </section>
   );

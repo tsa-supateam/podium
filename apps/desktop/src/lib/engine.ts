@@ -9,6 +9,8 @@ declare global {
       engineInfo: () => Promise<{ port: number; token: string; error?: string }>;
       openDataFolder: () => Promise<string>;
       isElectron: boolean;
+      win?: (action: "min" | "max" | "close") => void;
+      onMaximized?: (cb: (max: boolean) => void) => () => void;
     };
   }
 }

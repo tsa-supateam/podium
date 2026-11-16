@@ -7,7 +7,9 @@ import { keyMoments } from "../../lib/moments";
 import { AchievementBanner } from "../achievements/achievements";
 import { DrillResult } from "../learn/Learn";
 import { SKILL_FOR_METRIC, skillById } from "../learn/curriculum";
-import { EngagementChart, GazeHeatmap, ScoreRing, Timeline, ZoneBars, engagementHeadline, scoreColor } from "./charts";
+import { EngagementChart, Gauge, GazeHeatmap, Radar, Timeline, ZoneBars, engagementHeadline, scoreColor } from "./charts";
+import { Icon } from "../../ui/icons";
+import { Accordion, ScreenHeader, SegMeter } from "../../ui/kit";
 
 type Tab = "overview" | "timeline" | "gaze" | "transcript";
 const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
@@ -86,29 +88,14 @@ export default function Debrief() {
   ];
 
   return (
-    <div className="page debrief">
-      {s.drill && <DrillResult drill={s.drill} />}
-      {sid && bundle.session?.mode !== "replay" && !s.drill && <AchievementBanner sessionId={sid} />}
-      <div className="row debrief-title">
-        <div>
-          <h1>{s.title || "Debrief"}</h1>
-          <div className="muted small">
-            {fmt(s.durationSec)} · {s.wordCount} words
-          </div>
-        </div>
-        <span className="spacer" />
-        <button className="btn primary" onClick={() => go("setup")}>Practice again</button>
-      </div>
-
-      {s.noSpeech && (
-        <div className="card warn-card">
-          <b>No speech detected.</b> <span className="muted">Check the mic meter on the setup screen and System Settings → Privacy &amp; Security → Microphone.</span>
-        </div>
-      )}
-
-      <section className="hero-row">
-        <div className="hero-score">
-          {coach ? <CoachBadge score={s.scores.overall} /> : <ScoreRing score={s.scores.overall} grade={s.scores.grade} />}
+    <div className="page debrief stagger">
+      <ScreenHeader title={s.title || "Debrief"} meta={[fmt(s.durationSec), `${s.wordCount} words`]}>
+        <button className="btn primary" onClick={() => go("setup")}>Practice again <Icon name="arrowR" size={14} className="arw" /></button>
+      </ScreenHeader>
+      <div className="debrief-body">
+      <aside className="debrief-side scroll">
+        <div className="card hero-score">
+          {coach ? <CoachBadge score={s.scores.overall} /> : <Gauge score={s.scores.overall} grade={s.scores.grade} />}
           <Progress sessionId={sid!} overall={s.scores.overall} coach={coach} />
           <div className="chips chips-top">
             {TOP_METRICS.map((m) => {
@@ -118,10 +105,11 @@ export default function Debrief() {
                 <div className="chip" key={m.key} title={m.what}>
                   <span className="chip-label">{m.short}</span>
                   {coach ? (
-                    <b className="chip-word" style={{ color: lvl ? lvl.color : "var(--faint)" }}>{lvl ? lvl.word : "–"}</b>
+                    <b className="chip-word" style={{ color: lvl ? lvl.color : "var(--concrete-faint)" }}>{lvl ? lvl.word : "--"}</b>
                   ) : (
-                    <b style={{ color: v == null ? "var(--faint)" : scoreColor(v) }}>{v ?? "–"}</b>
+                    <b style={{ color: v == null ? "var(--concrete-faint)" : scoreColor(v) }}>{v ?? "--"}</b>
                   )}
+                  <SegMeter value={(v ?? 0) / 100} tone={v != null && v < 60 ? "signal" : undefined} label={m.short} />
                 </div>
               );
             })}
@@ -138,8 +126,16 @@ export default function Debrief() {
             <div className="audio-only muted small">Loading recording…</div>
           )}
         </div>
-      </section>
+      </aside>
 
+      <div className="debrief-main scroll">
+      {s.drill && <DrillResult drill={s.drill} />}
+      {sid && bundle.session?.mode !== "replay" && !s.drill && <AchievementBanner sessionId={sid} />}
+      {s.noSpeech && (
+        <div className="card warn-card">
+          <Icon name="warn" size={14} /> <b>No speech detected.</b> <span className="muted">Check the mic meter on the setup screen and System Settings → Privacy &amp; Security → Microphone.</span>
+        </div>
+      )}
       {s.engagement && s.engagement.series.t.length > 1 && (
         <EngagementSection e={s.engagement} duration={s.durationSec} current={now} onSeek={seek} />
       )}
@@ -148,9 +144,9 @@ export default function Debrief() {
       {voiceUrl && <audio ref={voiceRef} src={voiceUrl} onEnded={() => setSpeaking(false)} />}
 
 
-      <div className="tabs">
+      <div className="tabs" role="tablist">
         {tabs.map(([k, label]) => (
-          <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>
+          <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>
             {label}
           </button>
         ))}
@@ -171,6 +167,7 @@ export default function Debrief() {
         {tab === "gaze" && <GazeTab s={s} />}
         {tab === "timeline" && (
           <div className="card">
+            <h3 style={{ marginBottom: 12 }}>Signal timeline</h3>
             <Timeline s={s} current={now} onSeek={seek} />
           </div>
         )}
@@ -178,6 +175,8 @@ export default function Debrief() {
       </div>
 
       <DetailedStats s={s} />
+      </div>
+      </div>
     </div>
   );
 }
@@ -186,7 +185,7 @@ function TimeChip({ t, onSeek }: { t: number | null; onSeek: (t: number) => void
   if (t == null) return null;
   return (
     <button className="ts-chip" onClick={() => onSeek(t)} title="Play from here">
-      ▶ {fmt(t)}
+      <Icon name="play" size={10} /> {fmt(t)}
     </button>
   );
 }
@@ -209,16 +208,16 @@ function EngagementSection({ e, duration, current, onSeek }: {
         <div className="eng-rows">
           {dips.map((d, i) => (
             <button key={i} className="eng-row" onClick={() => onSeek(d.t0)} title={d.said ? `You said: “${d.said}”` : undefined}>
-              <span className="eng-num">{i + 1}</span>
+              <span className="eng-num">{String(i + 1).padStart(2, "0")}</span>
               <span className="eng-line">{d.line}</span>
-              <span className="mono muted">▶ {fmt(d.t)}</span>
+              <span className="mono muted"><Icon name="play" size={10} /> {fmt(d.t)}</span>
             </button>
           ))}
           {e.peak && (
             <button className="eng-row good" onClick={() => onSeek(e.peak!.t0)}>
-              <span className="eng-num">★</span>
+              <span className="eng-num">PK</span>
               <span className="eng-line">{e.peak.line}</span>
-              <span className="mono muted">▶ {fmt(e.peak.t0)}</span>
+              <span className="mono muted"><Icon name="play" size={10} /> {fmt(e.peak.t0)}</span>
             </button>
           )}
         </div>
@@ -231,12 +230,12 @@ function CoachBadge({ score }: { score: number }) {
   const lvl = coachLevel(score);
   return (
     <div className="coach-badge">
-      <div className="stars" aria-label={`${lvl.stars} of 5 stars`}>
-        {"★★★★★".slice(0, lvl.stars)}
-        <span className="stars-off">{"★★★★★".slice(lvl.stars)}</span>
+      <span className="micro">LVL.0{lvl.stars} / 05</span>
+      <div className="stars" role="img" aria-label={`${lvl.stars} of 5 stars`}>
+        {[1, 2, 3, 4, 5].map((i) => <i key={i} className={i <= lvl.stars ? "on" : ""} style={{ animationDelay: `${300 + i * 80}ms` }} />)}
       </div>
       <b style={{ color: lvl.color }}>{lvl.word}</b>
-      <span className="muted small">Practice mode</span>
+      <span className="micro">Practice mode</span>
     </div>
   );
 }
@@ -256,8 +255,8 @@ function Progress({ sessionId, overall, coach }: { sessionId: string; overall: n
   }, [sessionId]);
   if (!prev) return null;
   const delta = overall - prev.overall;
-  if (overall > prev.best) return <span className="progress-note good">🏆 Personal best!</span>;
-  if (delta > 0) return <span className="progress-note good">↑ {coach ? "Better" : `+${delta}`} than last run</span>;
+  if (overall > prev.best) return <span className="progress-note good"><Icon name="medal" size={14} /> Personal best!</span>;
+  if (delta > 0) return <span className="progress-note good"><Icon name="arrowUp" size={14} /> {coach ? "Better" : `+${delta}`} than last run</span>;
   if (coach) return null;
   return <span className="progress-note">{delta === 0 ? "Same as last run" : `${delta} vs last run`}</span>;
 }
@@ -272,7 +271,7 @@ function LearnLink({ metric }: { metric: string }) {
   };
   return (
     <button className="learn-link" onClick={open}>
-      📘 Learn this: {skill.module.title} › {skill.title}
+      <Icon name="book" size={14} /> Learn this: {skill.module.title} / {skill.title} <Icon name="arrowR" size={12} />
     </button>
   );
 }
@@ -293,12 +292,12 @@ function FixNext({ s, coach, onSeek, onPlay, speaking, canPlay }: {
   const strength = s.debrief.strengths[0];
   return (
     <section className="card fix-next">
-      {coach && strength && <p className="fix-win">✓ {strengthLine(strength.metric, s, strength.text)}</p>}
+      {coach && strength && <p className="fix-win"><Icon name="check" size={14} /> {strengthLine(strength.metric, s, strength.text)}</p>}
       <div className="row fix-head">
         <h3>{coach ? "Next time, try this" : headline.length > 1 ? "Fix these next" : "Fix this next"}</h3>
         <span className="spacer" />
         <button className="icon-btn" onClick={onPlay} disabled={!canPlay} title="Spoken debrief">
-          {speaking ? "■ Stop" : "🔊 Play"}
+          <Icon name={speaking ? "stop" : "speaker"} size={14} /> {speaking ? "Stop" : "Play"}
         </button>
       </div>
       {headline.length === 0 && (
@@ -322,7 +321,7 @@ function FixNext({ s, coach, onSeek, onPlay, speaking, canPlay }: {
           );
         })}
       </ol>
-      {!coach && strength && <p className="fix-strength">✓ {strengthLine(strength.metric, s, strength.text)}</p>}
+      {!coach && strength && <p className="fix-strength"><Icon name="check" size={14} /> {strengthLine(strength.metric, s, strength.text)}</p>}
       {smaller.length > 0 && (
         <details className="fix-more">
           <summary>+{smaller.length} smaller {smaller.length === 1 ? "tip" : "tips"}</summary>
@@ -346,8 +345,8 @@ function Moments({ s, onSeek }: { s: Summary; onSeek: (t: number) => void }) {
     <div className="moments">
       {moments.map((m, i) => (
         <button key={i} className={`moment ${m.good ? "good" : ""}`} onClick={() => onSeek(m.t)}>
-          <span>{m.good ? "★ " : ""}{m.label}</span>
-          <span className="mono muted">▶ {fmt(m.t)}</span>
+          <span>{m.good && <Icon name="target" size={12} />} {m.label}</span>
+          <span className="mono muted"><Icon name="play" size={10} /> {fmt(m.t)}</span>
         </button>
       ))}
     </div>
@@ -355,9 +354,10 @@ function Moments({ s, onSeek }: { s: Summary; onSeek: (t: number) => void }) {
 }
 
 function DetailedStats({ s }: { s: Summary }) {
+  const radar = [...TOP_METRICS, ...DELIVERY_METRICS].filter((m) => s.scores[m.key] != null).map((m) => [m.short, s.scores[m.key] as number] as [string, number]);
   return (
     <details className="card detailed-stats">
-      <summary>Detailed stats</summary>
+      <summary>Detailed stats <span className="acc-plus" aria-hidden><Icon name="plus" size={16} /></span></summary>
       <div className="stats-grid">
         <div>
           <h3>Speaking speed</h3>
@@ -383,21 +383,24 @@ function DetailedStats({ s }: { s: Summary }) {
             <span>Typical pitch</span><span>{Math.round(s.voice.f0MedianHz)} Hz</span>
           </div>
         </div>
+        {radar.length >= 3 && (
+          <div>
+            <h3>Skill breakdown</h3>
+            <Radar axes={radar} />
+          </div>
+        )}
       </div>
       <h3 style={{ marginTop: 18 }}>How it's scored</h3>
       <p className="muted small" style={{ marginTop: 0 }}>{OVERALL_HOW}</p>
-      <div className="how-grid">
-        {[...TOP_METRICS, ...DELIVERY_METRICS].map((m) => (
-          <div key={m.key}>
-            <b>
-              {m.title} · {s.scores[m.key] ?? "–"}/100
-            </b>
-            <ul>
+      <div>
+        {[...TOP_METRICS, ...DELIVERY_METRICS].map((m, i) => (
+          <Accordion key={m.key} index={i + 1} title={<>{m.title} <span className="muted">/ {s.scores[m.key] ?? "--"} of 100</span></>}>
+            <ul className="muted" style={{ margin: 0, paddingLeft: 16, display: "flex", flexDirection: "column", gap: 4 }}>
               {m.how.map((h) => (
                 <li key={h}>{h}</li>
               ))}
             </ul>
-          </div>
+          </Accordion>
         ))}
       </div>
     </details>
@@ -439,7 +442,7 @@ function TranscriptTab({ bundle, now, onSeek }: { bundle: SessionBundle; now: nu
       <div className="row" style={{ marginBottom: 10 }}>
         <h3>Transcript</h3>
         <span className="spacer" />
-        <span className="muted small">Fillers in red · click a word to play</span>
+        <span className="micro">Fillers marked in signal / click a word to play</span>
       </div>
       <div className="transcript">
         {words.map((w, i) => (
@@ -490,16 +493,12 @@ const DIMENSIONS: { key: "structure" | "evidence" | "commentary"; title: string;
 const RATING = ["", "Missing", "Weak", "Developing", "Strong", "Excellent"];
 
 function Rating({ score }: { score: number }) {
-  const color = score >= 4 ? "var(--good)" : score === 3 ? "var(--accent)" : "var(--bad)";
+  const color = score >= 4 ? "var(--good)" : score === 3 ? "var(--signal)" : "var(--bad-ink)";
   return (
     <span className="rating" aria-label={`${score} out of 5`}>
-      <span className="rating-dots">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <span key={i} className="dot" style={i <= score ? { background: color, borderColor: color } : undefined} />
-        ))}
-      </span>
+      <SegMeter value={score / 5} tone={score >= 4 ? undefined : score === 3 ? "signal" : "bad"} label={`${score} out of 5`} />
       <b style={{ color }}>{score}/5</b>
-      <span className="muted small">{RATING[score]}</span>
+      <span className="micro">{RATING[score]}</span>
     </span>
   );
 }
@@ -561,9 +560,9 @@ function ArgumentCard({ o, onSeek }: { o: NonNullable<Summary["overview"]>; onSe
           <li>
             <span className="ao-label">Conclusion</span>
             <span className="ao-text">
-              {o.concluded ? <span className="tag good">✓ Wrapped up</span> : <span className="tag bad">Missing</span>}
+              {o.concluded ? <span className="tag good"><Icon name="check" size={10} /> Wrapped up</span> : <span className="tag bad">Missing</span>}
               {o.persuasive && (
-                o.counterargument ? <span className="tag good">✓ Addressed the other side</span> : <span className="tag">Other side not addressed</span>
+                o.counterargument ? <span className="tag good"><Icon name="check" size={10} /> Addressed the other side</span> : <span className="tag">Other side not addressed</span>
               )}
             </span>
           </li>
@@ -574,7 +573,7 @@ function ArgumentCard({ o, onSeek }: { o: NonNullable<Summary["overview"]>; onSe
 }
 
 function Level({ v, coach }: { v: number | null | undefined; coach: boolean }) {
-  if (v == null) return <b className="muted">–</b>;
+  if (v == null) return <b className="muted">--</b>;
   const lvl = coachLevel(v);
   return coach ? <b style={{ color: lvl.color }}>{lvl.word}</b> : <b style={{ color: scoreColor(v) }}>{v}</b>;
 }
@@ -646,14 +645,14 @@ function AnswerFeedback({ s, coach, answers }: { s: Summary; coach: boolean; ans
         return (
           <div className="answer-fb" key={a.sessionId}>
             <div className="afb-head">
-              <span className="afb-num">Q{n + 1}</span>
+              <span className="afb-num">Q{String(n + 1).padStart(2, "0")}</span>
               <span className="afb-q">{a.question}</span>
               <button className="icon-btn" onClick={() => void play(a.sessionId)} disabled={!has}>
-                {playing === a.sessionId ? "■ Stop" : "▶ Listen"}
+                <Icon name={playing === a.sessionId ? "stop" : "play"} size={12} /> {playing === a.sessionId ? "Stop" : "Listen"}
               </button>
             </div>
             <div className="afb-meta muted small">
-              <span className={`tag ${a.onTopic ? "good" : "bad"}`}>{a.onTopic ? "✓ On topic" : "✗ Off topic"}</span>
+              <span className={`tag ${a.onTopic ? "good" : "bad"}`}><Icon name={a.onTopic ? "check" : "cross"} size={10} /> {a.onTopic ? "On topic" : "Off topic"}</span>
               {Math.round(a.durationSec)} s · {a.words} words · {Math.round(a.wpm)} words/min · {a.fillers} filler{a.fillers === 1 ? "" : "s"}
             </div>
             {silent ? (
@@ -680,8 +679,8 @@ function AnswerFeedback({ s, coach, answers }: { s: Summary; coach: boolean; ans
                 )}
                 {(a.strengths?.length || a.tips?.length) ? (
                   <ul className="afb-notes">
-                    {a.strengths?.slice(0, 1).map((t, i) => <li key={`s${i}`} className="good-note">✓ {t}</li>)}
-                    {a.tips?.map((t, i) => <li key={`t${i}`}>→ {t}</li>)}
+                    {a.strengths?.slice(0, 1).map((t, i) => <li key={`s${i}`} className="good-note"><Icon name="check" size={12} /> {t}</li>)}
+                    {a.tips?.map((t, i) => <li key={`t${i}`}><Icon name="arrowR" size={12} /> {t}</li>)}
                   </ul>
                 ) : null}
               </>

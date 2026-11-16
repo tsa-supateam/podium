@@ -3,9 +3,11 @@ import { cameraStream, startCamera, tracker } from "../../lib/camera";
 import { listMics, micLevelDb, startMic } from "../../lib/mic";
 import { CATEGORIES, randomPrompt } from "../../lib/prompts";
 import { zoneNames } from "../../lib/types";
-import { live, SPEED_BANDS, useApp, useTicker } from "../../stores/app";
+import { live, useApp, useTicker } from "../../stores/app";
 import { startSession } from "../live/session";
 import { skillById } from "../learn/curriculum";
+import { Icon } from "../../ui/icons";
+import { Corners, ScreenHeader } from "../../ui/kit";
 
 export default function Setup() {
   const { settings, setSettings, go, calibrated, set } = useApp();
@@ -56,15 +58,23 @@ export default function Setup() {
   const camera = settings.gazeMode === "camera";
   const drill = useApp((s) => s.drill);
   return (
-    <div className="page">
-      <h1 style={{ marginBottom: 18 }}>{drill ? "Set up your practice" : "Set up your practice run"}</h1>
+    <div className="page stagger">
+      <ScreenHeader title={drill ? "Set up your practice" : "Set up"} />
 
       {drill ? <DrillCard /> : <PromptPicker />}
 
       <div className="setup">
-        <div className="grid" style={{ alignContent: "start" }}>
+        <div className="grid scroll" style={{ alignContent: "start" }}>
           <div className="preview">
             <video ref={videoRef} autoPlay muted playsInline />
+            <Corners tone="signal" />
+            <svg className="reticle-overlay" viewBox="0 0 160 90" preserveAspectRatio="none" aria-hidden>
+              <g stroke="var(--paper)" strokeOpacity="0.35" strokeWidth="0.3" fill="none">
+                <path d="M53.3 0V90M106.6 0V90M0 30H160M0 60H160" strokeDasharray="1 2" />
+                <path d="M76 45h8M80 41v8" strokeOpacity="0.8" />
+              </g>
+            </svg>
+
             <div className="badge">
               <span className={`pill ${faceOk ? "ok" : "warn"}`}>
                 <span className="dot" /> {faceOk ? `Face found · ${zoneNames(settings.notes)[g!.zone]}` : "Looking for your face…"}
@@ -74,7 +84,7 @@ export default function Setup() {
           {camErr && <p style={{ color: "var(--bad)" }}>Camera unavailable: {camErr}. Eye contact will not be scored.</p>}
           <details className="card readout">
             <summary className="row" style={{ justifyContent: "space-between" }}>
-              <span className="muted small">Gaze readout</span>
+              <span className="micro">Gaze readout</span>
               <span className="muted small mono">
                 {tracker.fps.toFixed(0)} fps · {tracker.inferMs.toFixed(1)} ms/frame
               </span>
@@ -108,41 +118,31 @@ export default function Setup() {
           </div>
         </div>
 
-        <div className="grid" style={{ alignContent: "start" }}>
+        <div className="grid scroll" style={{ alignContent: "start" }}>
           <div className="card grid">
             <Toggle
               label="Mode"
               value={settings.difficulty}
               options={[["coach", "Practice"], ["judge", "Assessment"]]}
               onChange={(v) => setSettings({ difficulty: v as "coach" | "judge" })}
-              hint={settings.difficulty === "coach"
-                ? "Live tips, a friendlier audience, and encouraging results."
-                : "Test conditions: no tips, a strict audience, and scores out of 100."}
             />
             <Toggle
               label="Speech"
               value={settings.speechType}
               options={[["prepared", "Prepared"], ["impromptu", "On the spot"]]}
               onChange={(v) => setSettings({ speechType: v as "prepared" | "impromptu" })}
-              hint={`Target speed: ${SPEED_BANDS[settings.speechType].join("–")} words per minute.`}
             />
             <Toggle
               label="Look at"
               value={settings.gazeMode}
               options={[["room", "Simulated audience"], ["camera", "Direct camera"]]}
               onChange={(v) => { if (v !== settings.gazeMode) set({ calibrated: false }); setSettings({ gazeMode: v as "room" | "camera" }); }}
-              hint={camera
-                ? "Like a video interview: eye contact means looking up at the camera."
-                : "Like a room: sweep your eyes across the left, center and right of the audience."}
             />
             <Toggle
               label="Notes"
               value={settings.notes ? "yes" : "no"}
               options={[["yes", "Using notes or slides"], ["no", "No notes"]]}
               onChange={(v) => { if ((v === "yes") !== settings.notes) set({ calibrated: false }); setSettings({ notes: v === "yes" }); }}
-              hint={settings.notes
-                ? "Glancing down at notes is expected. Looks over 5 s count against you."
-                : "Looking down counts as looking away. Target: 85% eye contact."}
             />
             {!drill && <div className="row">
               <div className="field" style={{ flex: 1 }}>
@@ -169,9 +169,14 @@ export default function Setup() {
                   </option>
                 ))}
               </select>
-              <div className="meter" title={`${level.toFixed(0)} dBFS`}>
-                <div style={{ width: `${Math.max(0, Math.min(100, (level + 70) * 1.6))}%` }} />
+              <div className="meter" title={`${level.toFixed(0)} dBFS`} role="meter" aria-label="Microphone level"
+                aria-valuemin={-70} aria-valuemax={0} aria-valuenow={Math.round(level)}>
+                {Array.from({ length: 24 }, (_, i) => {
+                  const on = i < Math.round((Math.max(0, Math.min(100, (level + 70) * 1.6)) / 100) * 24);
+                  return <i key={i} className={`${on ? "on" : ""} ${i >= 19 ? "hot" : ""}`} />;
+                })}
               </div>
+              <span className="micro">{level > -119 ? `${level.toFixed(0)} DBFS` : "-- DBFS"}</span>
               {micErr && <span className="small" style={{ color: "var(--bad)" }}>Microphone unavailable: {micErr}</span>}
               {!micErr && micDead && (
                 <span className="small" style={{ color: "var(--bad)" }}>
@@ -188,12 +193,13 @@ export default function Setup() {
 
           <div className="row">
             <button className={`btn big ${calibrated ? "" : "primary"}`} onClick={() => go("calibrate")} disabled={!faceOk}>
+              <Icon name="crosshair" size={14} />
               {calibrated ? "Recalibrate" : camera ? "Calibrate gaze (6 s)" : "Calibrate gaze (12 s)"}
             </button>
             <span className="spacer" />
             <button className={`btn big ${calibrated ? "primary" : ""}`} onClick={begin} disabled={starting || !calibrated}
               title={calibrated ? undefined : "Calibrate your gaze first so eye contact is measured for your setup"}>
-              {starting ? "Starting…" : calibrated ? "Start speaking" : "Calibrate to start"}
+              {starting ? "Starting…" : calibrated ? "Start speaking" : "Calibrate to start"} <Icon name="arrowR" size={14} className="arw" />
             </button>
           </div>
         </div>
@@ -202,12 +208,11 @@ export default function Setup() {
   );
 }
 
-function Toggle({ label, value, options, onChange, hint }: {
+function Toggle({ label, value, options, onChange }: {
   label: string;
   value: string;
   options: [string, string][];
   onChange: (v: string) => void;
-  hint: string;
 }) {
   return (
     <div className="field">
@@ -219,7 +224,6 @@ function Toggle({ label, value, options, onChange, hint }: {
           </button>
         ))}
       </div>
-      <span className="muted small">{hint}</span>
     </div>
   );
 }
@@ -231,14 +235,14 @@ function DrillCard() {
   if (!drill || !skill) return null;
   return (
     <section className="card drill-card">
-      <span className="muted small">Practice · {skill.module.title} · {drill.seconds} s</span>
+      <span className="micro">Practice / {skill.module.title} / {drill.seconds} s</span>
       <b className="drill-title">{skill.title}</b>
       <p>{skill.practice.instruction}</p>
       <div className="practice-prompt"><span className="muted small">Your prompt</span><b>{drill.prompt}</b></div>
       <p className="small"><span className="muted">To pass:</span> {skill.practice.target}</p>
       <div className="row">
         <button className="link-btn" onClick={() => { set({ learnPath: { module: skill.module.id, skill: skill.id } }); go("learn"); }}>
-          ← Back to the lesson
+          <Icon name="arrowL" size={12} /> Back to the lesson
         </button>
       </div>
     </section>
@@ -270,7 +274,7 @@ function PromptPicker() {
             <option key={c}>{c}</option>
           ))}
         </select>
-        <button className="btn" onClick={roll} title="Pick another random prompt">🎲 New prompt</button>
+        <button className="btn" onClick={roll} title="Pick another random prompt"><Icon name="shuffle" size={14} /> New prompt</button>
       </div>
       <textarea
         className="prompt-input"
@@ -294,7 +298,7 @@ function PromptPicker() {
 function Check({ ok, label }: { ok: boolean; label: string }) {
   return (
     <li>
-      <span className={`ok-dot ${ok ? "ok" : "no"}`}>{ok ? "✓" : "•"}</span>
+      <span className={`ok-dot ${ok ? "ok" : "no"}`}><Icon name={ok ? "check" : "minus"} size={12} /></span>
       <span className={ok ? "" : "muted"}>{label}</span>
     </li>
   );

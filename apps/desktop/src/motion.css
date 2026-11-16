@@ -1,0 +1,79 @@
+/* Motion system. Only transform, opacity, clip-path, stroke-dashoffset (and rare filter) animate. */
+:root {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-quint: cubic-bezier(0.83, 0, 0.17, 1);
+  /* damped spring sampled into linear(): overshoot ~8%, settles by 70% */
+  --ease-spring: linear(0, 0.063 2.2%, 0.25 5.2%, 0.562 9.4%, 0.873 14.2%, 1.04 18.5%, 1.083 21.8%, 1.077 25.5%, 1.039 30.5%, 1.004 36%, 0.988 41.5%, 0.991 49%, 1.001 60%, 1);
+  --t-1: 120ms;
+  --t-2: 240ms;
+  --t-3: 480ms;
+  --t-4: 900ms;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); clip-path: inset(100% 0 0 0); } to { opacity: 1; transform: none; clip-path: inset(0 0 0 0); } }
+@keyframes line-up { from { transform: translateY(105%); } to { transform: none; } }
+@keyframes draw-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes draw-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes pulse-once { 0% { opacity: 0; transform: scale(0.4); } 40% { opacity: 1; transform: scale(1.6); } 100% { opacity: 0.5; transform: scale(1); } }
+@keyframes arrow-reenter { 0% { transform: none; opacity: 1; } 45% { transform: translateX(120%); opacity: 0; } 46% { transform: translateX(-120%); opacity: 0; } 100% { transform: none; opacity: 1; } }
+@keyframes dash { to { stroke-dashoffset: 0; } }
+@keyframes lock { from { transform: scale(0); } to { transform: scale(1); } }
+@keyframes wipe-up { to { clip-path: inset(0 0 0 0); } }
+@keyframes boot-out { to { opacity: 0; visibility: hidden; } }
+/* diagonal panel wipes off left to right; it starts moving almost at once so it reads as one motion */
+@keyframes shutter-off {
+  0%, 18% { clip-path: polygon(0 0, calc(100% + 120px) 0, 100% 100%, 0 100%); }
+  100% { clip-path: polygon(100% 0, calc(100% + 120px) 0, 100% 100%, calc(100% - 120px) 100%); }
+}
+@keyframes shutter-label { 0% { opacity: 0; transform: translateY(6px); } 20% { opacity: 1; transform: none; } 45% { opacity: 1; } 70%, 100% { opacity: 0; } }
+@keyframes toast-in { from { transform: translate(-50%, 16px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+@keyframes pop { 0% { opacity: 0; transform: translate(-50%, -8px) scale(0.9); } 12% { opacity: 1; transform: translate(-50%, 0) scale(1.05); } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, 0) scale(1); } }
+@keyframes cue-in {
+  from { transform: translateX(calc(-50% + 40vw)); clip-path: polygon(100% 0, 100% 0, 100% 100%, 100% 100%); }
+  to { transform: translateX(-50%); clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+}
+@keyframes drop { from { transform: translate(-50%, -260%); opacity: 0; } to { transform: translate(-50%, -100%); opacity: 1; } }
+@keyframes banner-in { from { transform: translateY(-16px); clip-path: inset(0 100% 0 0); } to { transform: none; clip-path: inset(0 0 0 0); } }
+@keyframes scan { from { transform: translateX(-120px); } to { transform: translateX(800px); } }
+@keyframes type { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes dot-drift { from { transform: translate(0, 0); } to { transform: translate(-40px, -20px); } }
+@keyframes radar-in { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes sweep-h { from { transform: translateY(-34px); opacity: 1; } to { transform: none; opacity: 0; } }
+@keyframes sweep-v { from { transform: translateX(-34px); opacity: 1; } to { transform: none; opacity: 0; } }
+@keyframes stamp { 0% { transform: scale(1.15); opacity: 0; } 40% { transform: scale(0.97, 1.03); opacity: 1; } 70% { transform: scale(1.01, 0.99); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes shine { from { transform: translateX(-140%); } to { transform: translateX(140%); } }
+@keyframes flap { 0% { transform: rotateX(90deg); } 100% { transform: none; } }
+
+/* content reveal: every screen's blocks fade up the same way, 50ms apart in DOM order */
+@keyframes enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.stagger > * { animation: enter 560ms var(--ease-out-expo) backwards; }
+.stagger > *:nth-child(2) { animation-delay: 50ms; }
+.stagger > *:nth-child(3) { animation-delay: 100ms; }
+.stagger > *:nth-child(4) { animation-delay: 150ms; }
+.stagger > *:nth-child(5) { animation-delay: 200ms; }
+.stagger > *:nth-child(6) { animation-delay: 250ms; }
+.stagger > *:nth-child(n + 7) { animation-delay: 300ms; }
+
+/* grid lines draw in once, intersections pulse once */
+.cgrid-v { animation: draw-y 900ms var(--ease-out-expo) both; }
+.cgrid-v:nth-child(2) { animation-delay: 80ms; }
+
+/* while recording, decorative motion stops so mic + MediaPipe + three.js keep their frame budget */
+.recording .hero-art::after, .recording .gauge-scale { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 120ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+  }
+  /* swap movement for a fade: keyframes still play, but these use opacity only */
+  .stagger > *, .line, .qa-pick, .eng-marker, .toast, .achievement-banner, .cue { animation-name: fade-in !important; }
+  .cgrid-v { animation: none !important; }
+  .hero-art::after, .gauge-scale, .spinner::after, .scan-panel::after, .scan-panel .loader svg, .calib-target.active .ret-ring, .rec-dot::before, .pill.ok .dot { animation: none !important; }
+  .shutter { display: none; }
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

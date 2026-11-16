@@ -3,7 +3,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { tracker } from "../../lib/camera";
 import { fitZoneModel, gazeAngles, irisReliability, type ZoneModel } from "../../lib/gaze";
 import type { RawGaze } from "../../lib/faceTracker";
-import { useApp } from "../../stores/app";
+import { live, useApp } from "../../stores/app";
+import { Icon } from "../../ui/icons";
+import { Stepper } from "../../ui/kit";
 
 type Z = "L" | "C" | "R" | "N";
 const STEPS: { zone: Z; label: string; hint: string; x: string; y: string }[] = [
@@ -86,15 +88,30 @@ export default function Calibration() {
   }, [go, set, settings.flipYaw, steps]);
 
   const cur = steps[step];
+  const g = live.gaze;
+  const coord = (v: string) => String(Math.round(parseFloat(v) * 10)).padStart(4, "0");
   return (
     <div className="calib">
       {steps.map((s, i) => (
         <div
           key={s.zone}
-          className={`calib-target ${i === step ? "active" : ""} ${i < step ? "done" : ""}`}
+          className={`calib-target ${i === step ? "active" : ""} ${i === step && progress > 0.05 ? "locked" : ""} ${i < step ? "done" : ""}`}
           style={{ left: s.x, top: s.y }}
         >
-          {i < step ? "✓" : s.label}
+          <svg viewBox="0 0 140 140" aria-hidden>
+            <g className="ret" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <g className="ret-ring"><circle cx="70" cy="70" r="46" strokeDasharray="3 7" /></g>
+              <circle cx="70" cy="70" r="30" />
+              <path d="M70 6v34M70 100v34M6 70h34M100 70h34" />
+              <path d="M24 24h10M24 24v10M116 24h-10M116 24v10M24 116h10M24 116v-10M116 116h-10M116 116v-10" />
+              {i === step && <circle cx="70" cy="70" r="30" stroke="var(--signal)" strokeWidth="3" pathLength={1} strokeDasharray="1" strokeDashoffset={1 - progress} transform="rotate(-90 70 70)" />}
+            </g>
+          </svg>
+          {i < step ? <Icon name="check" size={22} /> : <span style={{ width: 6, height: 6, background: "currentColor" }} />}
+          <span className="calib-label micro">
+            <b>{s.label}</b>
+            X {coord(s.x)} Y {coord(s.y)}
+          </span>
         </div>
       ))}
       <div className="calib-panel grid">
@@ -108,9 +125,15 @@ export default function Calibration() {
         </p>
         {step >= 0 && step < steps.length && (
           <div className="progress">
-            <div style={{ width: `${progress * 100}%` }} />
+            {Array.from({ length: 32 }, (_, i) => <i key={i} className={i < Math.round(progress * 32) ? "on" : ""} />)}
           </div>
         )}
+        <div className="row" style={{ justifyContent: "center" }}>
+          <Stepper index={Math.max(0, Math.min(step, steps.length - 1))} total={steps.length} label="TARGET" />
+        </div>
+        <span className="micro">
+          {g?.face ? `GAZE X ${g.gYaw.toFixed(1).padStart(6, " ")}° Y ${g.gPitch.toFixed(1).padStart(6, " ")}°` : "NO FACE / HOLD STILL"}
+        </span>
         <button className="btn ghost" onClick={() => go("setup")}>
           Cancel
         </button>

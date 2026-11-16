@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "assets": "node scripts/copy-assets.mjs",
+    "icons": "node scripts/make-icons.mjs",
     "dev": "npm run assets && node scripts/dev.mjs",
     "dev:web": "npm run assets && vite",
     "build": "npm run assets && tsc --noEmit && vite build && node scripts/build-electron.mjs",

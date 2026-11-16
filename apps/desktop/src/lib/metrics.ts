@@ -149,9 +149,9 @@ export function stripDrillLabel(drill: string): string {
 export function coachLevel(score: number): { stars: number; word: string; color: string } {
   if (score >= 85) return { stars: 5, word: "Excellent", color: "var(--good)" };
   if (score >= 70) return { stars: 4, word: "Strong", color: "var(--good)" };
-  if (score >= 55) return { stars: 3, word: "Solid", color: "#7cc7a0" };
+  if (score >= 55) return { stars: 3, word: "Solid", color: "var(--concrete)" };
   if (score >= 40) return { stars: 2, word: "Building", color: "var(--accent)" };
-  return { stars: 1, word: "Warming up", color: "var(--info)" };
+  return { stars: 1, word: "Warming up", color: "var(--concrete-dim)" };
 }
 
 /** The three headline scores. Delivery details (speed, fillers, voice, eye contact) sit under Engagement. */

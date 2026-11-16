@@ -1,33 +1,87 @@
-// Small dependency-free SVG/canvas charts for the debrief.
+// Instrumentation-style charts for the debrief: gauge dial, oscilloscope timeline, scope engagement curve,
+// zone meters, blueprint radar and sparklines. Dependency-free SVG/canvas; colours come from CSS tokens.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Summary, Zone } from "../../lib/types";
+import { SegMeter } from "../../ui/kit";
+import { useCountUp, useInView, useSpring } from "../../ui/motion";
 
 export function scoreColor(s: number): string {
-  return s >= 80 ? "var(--good)" : s >= 60 ? "var(--warn)" : "var(--bad)";
+  return s >= 80 ? "var(--good)" : s >= 60 ? "var(--signal)" : "var(--bad-ink)";
 }
 
-export function ScoreRing({ score, grade }: { score: number; grade: string }) {
-  const r = 86, c = 2 * Math.PI * r;
+/** Read a colour token for canvas drawing (canvas can't resolve CSS variables itself). */
+export function token(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+const rgbOf = (hex: string): [number, number, number] => {
+  const h = hex.replace("#", "");
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
+};
+
+const fmtT = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+const pad4 = (n: number) => String(Math.max(0, Math.round(n))).padStart(4, "0");
+
+// ---------------------------------------------------------------- gauge dial
+const START = 135, SWEEP = 270; // degrees, clockwise from +x
+const polar = (cx: number, cy: number, r: number, deg: number): [number, number] => {
+  const a = (deg * Math.PI) / 180;
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+};
+const arc = (cx: number, cy: number, r: number, a0: number, a1: number) => {
+  const [x0, y0] = polar(cx, cy, r, a0), [x1, y1] = polar(cx, cy, r, a1);
+  return `M${x0.toFixed(2)},${y0.toFixed(2)}A${r},${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)},${y1.toFixed(2)}`;
+};
+
+/** 270° gauge: 60 ticks (every 5th long), signal arc, spring needle, count-up numerals, chamfered grade tag. */
+export function Gauge({ score, grade }: { score: number; grade: string }) {
+  const [ref, seen] = useInView<HTMLDivElement>();
+  const v = useSpring(score, seen);
+  const n = useCountUp(score, seen);
+  const cx = 120, cy = 120, R = 88;
+  const clamped = Math.max(0, Math.min(100, v));
+  const needle = START + (clamped / 100) * SWEEP;
+  const [nx, ny] = polar(cx, cy, R - 14, needle);
   return (
-    <div className="score-ring">
-      <svg viewBox="0 0 200 200" width="200" height="200">
-        <circle cx="100" cy="100" r={r} fill="none" stroke="var(--panel-2)" strokeWidth="14" />
-        <circle
-          cx="100" cy="100" r={r} fill="none" stroke={scoreColor(score)} strokeWidth="14" strokeLinecap="round"
-          strokeDasharray={`${(score / 100) * c} ${c}`} transform="rotate(-90 100 100)"
-        />
+    <div className="gauge" ref={ref} role="img" aria-label={`Score ${score} out of 100, grade ${grade}`}>
+      <svg viewBox="0 0 240 220" width="240" height="220">
+        <g className="gauge-scale">
+          <circle cx={cx} cy={cy} r={110} fill="none" stroke="var(--concrete-faint)" strokeWidth={1} strokeDasharray="1 5" />
+        </g>
+        <path d={arc(cx, cy, R, START, START + SWEEP)} fill="none" stroke="var(--charcoal-500)" strokeWidth={8} />
+        {clamped > 0.2 && <path d={arc(cx, cy, R, START, needle)} fill="none" stroke="var(--signal)" strokeWidth={8} />}
+        {Array.from({ length: 61 }, (_, i) => {
+          const a = START + (i / 60) * SWEEP, major = i % 5 === 0;
+          const [x0, y0] = polar(cx, cy, R + 7, a), [x1, y1] = polar(cx, cy, R + (major ? 16 : 11), a);
+          return <line key={i} x1={x0} y1={y0} x2={x1} y2={y1} stroke={major ? "var(--concrete)" : "var(--concrete-faint)"} strokeWidth={major ? 1.5 : 1} />;
+        })}
+        {[0, 25, 50, 75, 100].map((s) => {
+          const [x, y] = polar(cx, cy, R + 27, START + (s / 100) * SWEEP);
+          return <text key={s} x={x} y={y + 3} textAnchor="middle" fontSize="9" fill="var(--concrete-dim)" fontFamily="var(--mono)">{String(s).padStart(3, "0")}</text>;
+        })}
+        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="var(--paper)" strokeWidth={2} />
+        <rect x={cx - 5} y={cy - 5} width={10} height={10} fill="var(--signal)" transform={`rotate(45 ${cx} ${cy})`} />
       </svg>
-      <div className="num">
-        <div>
-          <b>{score}</b>
-          <span className="muted">out of 100 · grade {grade}</span>
-        </div>
+      <div className="gauge-num">
+        <b>{Math.round(n)}</b>
+        <span className="micro">SCORE / 100</span>
+        <span className="grade-tag">{grade}</span>
       </div>
     </div>
   );
 }
+/** Kept for callers that still use the old name. */
+export const ScoreRing = Gauge;
 
-const ZONE_COLOR: Record<Zone, string> = { L: "#6aa9ff", C: "#4fd18b", R: "#c792ea", N: "#f5b14c", X: "#3b4252" };
+// ---------------------------------------------------------------- zones (shape + label, never colour alone)
+export const ZONE_FILL: Record<Zone, string> = { L: "var(--signal)", C: "var(--paper)", R: "var(--concrete-dim)", N: "url(#pat-N)", X: "url(#pat-X)" };
+
+export function ZoneSwatch({ z }: { z: Zone }) {
+  return (
+    <svg width="14" height="10" aria-hidden>
+      <rect width="14" height="10" fill={ZONE_FILL[z]} />
+    </svg>
+  );
+}
 
 interface TimelineProps {
   s: Summary;
@@ -35,24 +89,22 @@ interface TimelineProps {
   onSeek: (t: number) => void;
 }
 
-/** Multi-lane timeline: pace, pitch, fillers, gaze ribbon on one time axis (engagement has its own chart). */
+/** Oscilloscope strip: pace, pitch, fillers, gaze bands on one time axis, with a snapping crosshair readout. */
 export function Timeline({ s, current, onSeek }: TimelineProps) {
-  const W = 1100, padL = 70, padR = 14;
-  const lanes = { pace: [10, 70], pitch: [90, 140], fill: [156, 176], gaze: [192, 208] } as const;
-  const H = 232;
+  const W = 1100, padL = 86, padR = 14;
+  const lanes = { pace: [14, 78], pitch: [96, 146], fill: [164, 188], gaze: [202, 220] } as const;
+  const H = 248;
   const dur = Math.max(s.durationSec, 1);
   const band = s.pacing.band ?? [130, 170];
   const x = (t: number) => padL + (t / dur) * (W - padL - padR);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [hover, setHover] = useState<{ t: number; px: number } | null>(null);
+  const [hover, setHover] = useState<{ t: number; px: number; sx: number; sy: number; wpm: number | null } | null>(null);
+  const paceY = (w: number) => lanes.pace[1] - (Math.min(w, 240) / 240) * (lanes.pace[1] - lanes.pace[0]);
 
-  const pacePath = useMemo(() => {
+  const pace = useMemo(() => {
     const p = s.pacing.series;
-    const t = p.smoothT ?? p.t, v = p.smooth ?? p.wpm;
-    if (!t?.length) return "";
-    const [y0, y1] = lanes.pace;
-    const y = (w: number) => y1 - (Math.min(w, 240) / 240) * (y1 - y0);
-    return t.map((tt, i) => `${i ? "L" : "M"}${x(tt).toFixed(1)},${y(v[i]).toFixed(1)}`).join("");
+    const t = p.smoothT ?? p.t ?? [], v = p.smooth ?? p.wpm ?? [];
+    return { t, v, d: t.map((tt, i) => `${i ? "L" : "M"}${x(tt).toFixed(1)},${paceY(v[i]).toFixed(1)}`).join("") };
   }, [s]);
 
   const pitchPath = useMemo(() => {
@@ -69,88 +121,125 @@ export function Timeline({ s, current, onSeek }: TimelineProps) {
     return d;
   }, [s]);
 
-  const paceY = (w: number) => lanes.pace[1] - (w / 240) * (lanes.pace[1] - lanes.pace[0]);
-
   const toTime = (clientX: number) => {
     const r = svgRef.current!.getBoundingClientRect();
     const px = ((clientX - r.left) / r.width) * W;
-    return { t: Math.max(0, Math.min(dur, ((px - padL) / (W - padL - padR)) * dur)), px: clientX - r.left };
+    return { t: Math.max(0, Math.min(dur, ((px - padL) / (W - padL - padR)) * dur)), px: clientX - r.left, scale: r.width / W };
+  };
+  const onMove = (clientX: number) => {
+    const { t, px, scale } = toTime(clientX);
+    // snap the crosshair to the nearest pace sample
+    let best = -1, bd = Infinity;
+    pace.t.forEach((tt, i) => { const d = Math.abs(tt - t); if (d < bd) { bd = d; best = i; } });
+    const snap = best >= 0 && Math.abs(x(pace.t[best]) - x(t)) < 18;
+    const st = snap ? pace.t[best] : t;
+    setHover({ t: st, px: snap ? x(st) * scale : px, sx: x(st), sy: snap ? paceY(pace.v[best]) : lanes.pace[1], wpm: snap ? pace.v[best] : null });
   };
 
   const gz = s.gaze?.timeline ?? [];
+  const minor = dur > 240 ? 15 : 5, major = dur > 240 ? 60 : 30;
+  let lastLabel = -Infinity;
 
   return (
-    <div className="chart-wrap">
+    <div className="chart-wrap scope">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
-        onMouseMove={(e) => setHover(toTime(e.clientX))}
+        onMouseMove={(e) => onMove(e.clientX)}
         onMouseLeave={() => setHover(null)}
         onClick={(e) => onSeek(toTime(e.clientX).t)}
-        style={{ cursor: "pointer" }}
+        style={{ cursor: "crosshair", background: "var(--charcoal-900)" }}
       >
+        <rect x={padL} y={0} width={W - padL - padR} height={H - 16} fill="url(#pat-dots)" />
+        {/* minor / major grid */}
+        {Array.from({ length: Math.floor(dur / minor) + 1 }, (_, i) => i * minor).map((t) => (
+          <line key={`g${t}`} x1={x(t)} x2={x(t)} y1={0} y2={H - 16} stroke="var(--concrete)" strokeOpacity={t % major === 0 ? 0.16 : 0.06} />
+        ))}
+        {[lanes.pace, lanes.pitch, lanes.fill, lanes.gaze].map(([a, b], i) => (
+          <g key={i}>
+            <line x1={padL} x2={W - padR} y1={a} y2={a} stroke="var(--concrete)" strokeOpacity={0.08} />
+            <line x1={padL} x2={W - padR} y1={b} y2={b} stroke="var(--concrete)" strokeOpacity={0.16} />
+          </g>
+        ))}
         {/* lane labels */}
-        {[["Speed", lanes.pace], ["Voice pitch", lanes.pitch], ["Fillers", lanes.fill], ["Looking at", lanes.gaze]].map(
-          ([label, [a, b]]: any) => (
-            <text key={label} x={4} y={(a + b) / 2 + 4} fill="var(--muted)" fontSize="11">
-              {label}
-            </text>
-          ),
-        )}
-        {/* shaded problem zones */}
+        {([["SPEED", lanes.pace], ["PITCH", lanes.pitch], ["FILLERS", lanes.fill], ["GAZE", lanes.gaze]] as const).map(([label, [a, b]]) => (
+          <text key={label} x={6} y={(a + b) / 2 + 3} fill="var(--concrete)" fontSize="10" letterSpacing="0.08em" fontFamily="var(--mono)">{label}</text>
+        ))}
+        {/* problem zones */}
         {s.pacing.accelZones.filter((z) => z.kind === "rush").map((z, i) => (
-          <rect key={`r${i}`} x={x(z.t0)} width={Math.max(2, x(z.t1) - x(z.t0))} y={lanes.pace[0]} height={lanes.pace[1] - lanes.pace[0]} fill="#ff6b6b18" />
+          <rect key={`r${i}`} x={x(z.t0)} width={Math.max(2, x(z.t1) - x(z.t0))} y={lanes.pace[0]} height={lanes.pace[1] - lanes.pace[0]} fill="url(#pat-N)" opacity={0.45} />
         ))}
         {s.voice.monotoneSegments.map((m, i) => (
-          <rect key={`m${i}`} x={x(m.t0)} width={Math.max(2, x(m.t1) - x(m.t0))} y={lanes.pitch[0]} height={lanes.pitch[1] - lanes.pitch[0]} fill="#f5b14c18" />
+          <rect key={`m${i}`} x={x(m.t0)} width={Math.max(2, x(m.t1) - x(m.t0))} y={lanes.pitch[0]} height={lanes.pitch[1] - lanes.pitch[0]} fill="url(#pat-X)" opacity={0.8} />
         ))}
         {/* pace band */}
-        <rect x={padL} width={W - padL - padR} y={paceY(band[1])} height={paceY(band[0]) - paceY(band[1])} fill="#4fd18b10" />
-        <line x1={padL} x2={W - padR} y1={lanes.pace[1]} y2={lanes.pace[1]} stroke="var(--line)" />
-        <path d={pacePath} fill="none" stroke="var(--info)" strokeWidth={2} />
+        <rect x={padL} width={W - padL - padR} y={paceY(band[1])} height={paceY(band[0]) - paceY(band[1])} fill="var(--paper)" opacity={0.05} />
+        <line x1={padL} x2={W - padR} y1={paceY(band[1])} y2={paceY(band[1])} stroke="var(--paper)" strokeOpacity={0.3} strokeDasharray="2 4" />
+        <line x1={padL} x2={W - padR} y1={paceY(band[0])} y2={paceY(band[0])} stroke="var(--paper)" strokeOpacity={0.3} strokeDasharray="2 4" />
+        <path className="trace" d={pace.d} pathLength={1} fill="none" stroke="var(--signal)" strokeWidth={1.75} />
         {/* pitch */}
-        <line x1={padL} x2={W - padR} y1={(lanes.pitch[0] + lanes.pitch[1]) / 2} y2={(lanes.pitch[0] + lanes.pitch[1]) / 2} stroke="var(--line)" />
-        <path d={pitchPath} fill="none" stroke="var(--zone-R)" strokeWidth={1.2} opacity={0.9} />
-        {/* fillers */}
+        <line x1={padL} x2={W - padR} y1={(lanes.pitch[0] + lanes.pitch[1]) / 2} y2={(lanes.pitch[0] + lanes.pitch[1]) / 2} stroke="var(--concrete)" strokeOpacity={0.2} />
+        <path className="trace delay" d={pitchPath} pathLength={1} fill="none" stroke="var(--paper)" strokeWidth={1} opacity={0.85} />
+        {/* fillers: triangles that drop in, with mono labels where there is room */}
         {s.fillers.clusters.map((c, i) => (
-          <rect key={`c${i}`} x={x(c.t0) - 3} width={Math.max(6, x(c.t1) - x(c.t0) + 6)} y={lanes.fill[0] - 3} height={lanes.fill[1] - lanes.fill[0] + 6} rx={4} fill="#ff6b6b22" stroke="#ff6b6b66" />
+          <rect key={`c${i}`} x={x(c.t0) - 3} width={Math.max(6, x(c.t1) - x(c.t0) + 6)} y={lanes.fill[0]} height={lanes.fill[1] - lanes.fill[0]} fill="var(--signal)" opacity={0.12} />
         ))}
-        {s.fillers.events.map((f, i) => (
-          <circle key={`f${i}`} cx={x(f.t0)} cy={(lanes.fill[0] + lanes.fill[1]) / 2} r={4.5} fill={f.class === "lexical" ? "#ff9f6b" : "#ff6b6b"}>
-            <title>{`${f.token} @ ${f.t0.toFixed(1)}s`}</title>
-          </circle>
-        ))}
-        {/* gaze ribbon */}
+        {s.fillers.events.map((f, i) => {
+          const fx = x(f.t0), lab = fx - lastLabel > 46;
+          if (lab) lastLabel = fx;
+          const y0 = lanes.fill[0] + 3;
+          return (
+            <g key={`f${i}`} className="drop" style={{ animationDelay: `${300 + i * 15}ms` }}>
+              <path d={`M${fx - 4.5},${y0}L${fx + 4.5},${y0}L${fx},${y0 + 8}Z`} fill={f.class === "lexical" ? "var(--paper)" : "var(--signal)"} />
+              {lab && <text x={fx + 6} y={y0 + 18} fontSize="8.5" fill="var(--concrete-dim)" fontFamily="var(--mono)">{f.token.toUpperCase()}</text>}
+              <title>{`${f.token} @ ${f.t0.toFixed(1)}s`}</title>
+            </g>
+          );
+        })}
+        {/* gaze bands */}
         {gz.length ? (
           gz.map(([t, z], i) => {
             const t1 = i + 1 < gz.length ? gz[i + 1][0] : dur;
-            return <rect key={`g${i}`} x={x(t)} width={Math.max(0.5, x(t1) - x(t))} y={lanes.gaze[0]} height={lanes.gaze[1] - lanes.gaze[0]} fill={ZONE_COLOR[z]} />;
+            return <rect key={`z${i}`} x={x(t)} width={Math.max(0.5, x(t1) - x(t))} y={lanes.gaze[0]} height={lanes.gaze[1] - lanes.gaze[0]} fill={ZONE_FILL[z]} />;
           })
         ) : (
-          <text x={padL} y={lanes.gaze[1] - 2} fill="var(--faint)" fontSize="11">no camera data</text>
+          <text x={padL + 6} y={lanes.gaze[1] - 4} fill="var(--concrete-faint)" fontSize="10" fontFamily="var(--mono)">NO CAMERA DATA</text>
         )}
-        {/* time axis */}
-        {Array.from({ length: Math.floor(dur / 30) + 1 }, (_, i) => i * 30).map((t) => (
-          <text key={t} x={x(t)} y={H - 4} fill="var(--faint)" fontSize="10" textAnchor="middle">
-            {Math.floor(t / 60)}:{String(t % 60).padStart(2, "0")}
-          </text>
+        {/* x axis: mm:ss ticks */}
+        {Array.from({ length: Math.floor(dur / major) + 1 }, (_, i) => i * major).map((t) => (
+          <g key={`a${t}`} fontFamily="var(--mono)">
+            <line x1={x(t)} x2={x(t)} y1={H - 16} y2={H - 11} stroke="var(--concrete)" />
+            <text x={x(t)} y={H - 2} fill="var(--concrete-dim)" fontSize="9.5" textAnchor="middle">{fmtT(t)}</text>
+          </g>
         ))}
         {/* playhead */}
-        <line x1={x(current)} x2={x(current)} y1={0} y2={H - 14} stroke="var(--accent)" strokeWidth={1.5} />
+        <line x1={x(current)} x2={x(current)} y1={0} y2={H - 16} stroke="var(--signal)" strokeWidth={1.5} />
+        <path d={`M${x(current) - 5},0L${x(current) + 5},0L${x(current)},7Z`} fill="var(--signal)" />
+        {/* crosshair */}
+        {hover && (
+          <g pointerEvents="none">
+            <line x1={hover.sx} x2={hover.sx} y1={0} y2={H - 16} stroke="var(--paper)" strokeOpacity={0.6} />
+            <line x1={padL} x2={W - padR} y1={hover.sy} y2={hover.sy} stroke="var(--paper)" strokeOpacity={0.35} strokeDasharray="3 3" />
+            <rect x={hover.sx - 3.5} y={hover.sy - 3.5} width={7} height={7} fill="none" stroke="var(--signal)" strokeWidth={1.5} />
+          </g>
+        )}
       </svg>
       {hover && (
-        <div className="chart-tip" style={{ left: hover.px, top: 0 }}>
-          {Math.floor(hover.t / 60)}:{String(Math.floor(hover.t % 60)).padStart(2, "0")} · click to play from here
-        </div>
+        <>
+          <span className="readout-xy mono">X {pad4(Math.floor(hover.t / 60) * 100 + Math.floor(hover.t % 60))} Y {hover.wpm != null ? pad4(hover.wpm) : "----"}</span>
+          <div className="chart-tip" style={{ left: hover.px, top: 0 }}>
+            {fmtT(hover.t)}{hover.wpm != null ? ` · ${Math.round(hover.wpm)} WPM` : ""} · click to play
+          </div>
+        </>
       )}
-      <div className="legend" style={{ marginTop: 8 }}>
-        <span><i style={{ background: "#4fd18b10", border: "1px solid #4fd18b55" }} />ideal speed ({band.join("–")} words/min)</span>
-        <span><i style={{ background: "#ff6b6b18" }} />talking too fast</span>
-        <span><i style={{ background: "#f5b14c18" }} />voice went flat</span>
-        <span><i style={{ background: "#ff6b6b" }} />um / uh</span>
-        <span><i style={{ background: "#ff9f6b" }} />like / you know</span>
+      <div className="legend" style={{ marginTop: 10 }}>
+        <span><i style={{ background: "var(--paper)", opacity: 0.25 }} />ideal speed ({band.join("–")} wpm)</span>
+        <span><svg width="14" height="10" aria-hidden><rect width="14" height="10" fill="url(#pat-N)" /></svg>talking too fast</span>
+        <span><svg width="14" height="10" aria-hidden><rect width="14" height="10" fill="url(#pat-X)" /></svg>voice went flat</span>
+        <span><svg width="10" height="8" aria-hidden><path d="M0,0L10,0L5,8Z" fill="var(--signal)" /></svg>um / uh</span>
+        <span><svg width="10" height="8" aria-hidden><path d="M0,0L10,0L5,8Z" fill="var(--paper)" /></svg>like / you know</span>
         {(["L", "C", "R", "N", "X"] as Zone[]).map((z) => (
-          <span key={z}><i style={{ background: ZONE_COLOR[z] }} />{{ L: "left", C: "center", R: "right", N: s.gaze?.notesMode === false ? "down" : "notes", X: "away" }[z]}</span>
+          <span key={z}><ZoneSwatch z={z} />{{ L: "left", C: "center", R: "right", N: s.gaze?.notesMode === false ? "down" : "notes", X: "away" }[z]}</span>
         ))}
       </div>
     </div>
@@ -169,15 +258,23 @@ export function GazeHeatmap({ g }: { g: NonNullable<Summary["gaze"]> }) {
     cv.width = W;
     cv.height = H;
     const ctx = cv.getContext("2d")!;
-    ctx.fillStyle = "#0b0d12";
+    const stops = ["--charcoal-600", "--concrete-dim", "--signal", "--paper"].map((t) => rgbOf(token(t)));
+    ctx.fillStyle = token("--charcoal-900");
     ctx.fillRect(0, 0, W, H);
+    // blueprint grid
+    ctx.strokeStyle = token("--concrete");
+    ctx.globalAlpha = 0.06;
+    ctx.lineWidth = 1;
+    for (let gx = 0; gx <= W; gx += 32) { ctx.beginPath(); ctx.moveTo(gx + 0.5, 0); ctx.lineTo(gx + 0.5, H); ctx.stroke(); }
+    for (let gy = 0; gy <= H; gy += 32) { ctx.beginPath(); ctx.moveTo(0, gy + 0.5); ctx.lineTo(W, gy + 0.5); ctx.stroke(); }
+    ctx.globalAlpha = 1;
     const [y0, y1] = g.heatmap.yawBins, [p0, p1] = g.heatmap.pitchBins;
     const cw = W / cols, ch = H / rows;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const v = bytes[r * cols + c] / 255;
         if (v < 0.02) continue;
-        ctx.fillStyle = heat(v);
+        ctx.fillStyle = heat(v, stops);
         // row 0 = lowest pitch → draw at the bottom; yaw + = speaker's right → draw on the right
         ctx.fillRect(c * cw, H - (r + 1) * ch, cw + 0.5, ch + 0.5);
       }
@@ -188,8 +285,9 @@ export function GazeHeatmap({ g }: { g: NonNullable<Summary["gaze"]> }) {
     // so the picture and the percentages always agree.
     const b = g.boundaries ?? { leftCenter: -12, centerRight: 12, down: -15 };
     const camera = g.mode === "camera";
-    ctx.strokeStyle = "#ffffff40";
-    ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = token("--concrete");
+    ctx.globalAlpha = 0.5;
+    ctx.setLineDash([4, 6]);
     ctx.beginPath();
     if (!camera) {
       ctx.moveTo(X(b.leftCenter), 0); ctx.lineTo(X(b.leftCenter), Y(b.down));
@@ -198,63 +296,43 @@ export function GazeHeatmap({ g }: { g: NonNullable<Summary["gaze"]> }) {
     ctx.moveTo(0, Y(b.down)); ctx.lineTo(W, Y(b.down));
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = "#ffffffaa";
-    ctx.font = "600 13px system-ui";
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = token("--paper");
+    ctx.font = `500 11px ${token("--mono")}`;
     ctx.textAlign = "center";
     const mid = (a: number, c: number) => (X(a) + X(c)) / 2;
     if (camera) {
       ctx.fillText(`EYE CONTACT ${(g.zonePct.L + g.zonePct.C + g.zonePct.R).toFixed(1)}%`, W / 2, 22);
     } else {
-      ctx.fillText(`LEFT ${g.zonePct.L}%`, Math.max(40, mid(y0, b.leftCenter)), 22);
-      ctx.fillText(`CENTER ${g.zonePct.C}%`, mid(b.leftCenter, b.centerRight), 22);
-      ctx.fillText(`RIGHT ${g.zonePct.R}%`, Math.min(W - 40, mid(b.centerRight, y1)), 22);
+      ctx.fillText(`L / ${g.zonePct.L}%`, Math.max(40, mid(y0, b.leftCenter)), 22);
+      ctx.fillText(`C / ${g.zonePct.C}%`, mid(b.leftCenter, b.centerRight), 22);
+      ctx.fillText(`R / ${g.zonePct.R}%`, Math.min(W - 40, mid(b.centerRight, y1)), 22);
     }
-    ctx.fillText(`${g.notesMode === false ? "LOOKING DOWN" : "NOTES / SLIDES"} ${g.zonePct.N}%`, W / 2, H - 14);
+    ctx.fillText(`${g.notesMode === false ? "DOWN" : "NOTES"} / ${g.zonePct.N}%`, W / 2, H - 14);
   }, [g]);
-  return <canvas ref={ref} style={{ width: "100%", maxWidth: 640, display: "block", margin: "0 auto", borderRadius: 12, border: "1px solid var(--line)" }} />;
+  return <canvas ref={ref} style={{ width: "100%", maxWidth: 640, display: "block", margin: "0 auto" }} />;
 }
 
-function heat(v: number): string {
-  // dark blue → teal → amber → white
-  const stops = [[20, 40, 90], [40, 170, 160], [245, 177, 76], [255, 245, 220]];
+function heat(v: number, stops: [number, number, number][]): string {
   const p = Math.min(0.999, v) * (stops.length - 1);
   const i = Math.floor(p), f = p - i;
   const c = stops[i].map((a, k) => Math.round(a + (stops[i + 1][k] - a) * f));
-  return `rgba(${c[0]},${c[1]},${c[2]},${0.35 + 0.65 * v})`;
+  return `rgba(${c[0]},${c[1]},${c[2]},${0.4 + 0.6 * v})`;
 }
 
 export function ZoneBars({ pct, notes = true, camera = false }: { pct: Record<Zone, number>; notes?: boolean; camera?: boolean }) {
   const names: Record<Zone, string> = { L: "Left audience", C: "Center audience", R: "Right audience", N: notes ? "Notes / slides" : "Looking down", X: "Away / no face" };
-  if (camera) {
-    const at = Math.round((pct.L + pct.C + pct.R) * 10) / 10;
-    const rows: [string, number, string][] = [["Looking at camera", at, ZONE_COLOR.C], [names.N, pct.N, ZONE_COLOR.N], [names.X, pct.X, ZONE_COLOR.X]];
-    return (
-      <div className="grid" style={{ gap: 8 }}>
-        {rows.map(([name, v, color]) => (
-          <div key={name}>
-            <div className="row small" style={{ justifyContent: "space-between" }}>
-              <span>{name}</span>
-              <span className="mono">{v}%</span>
-            </div>
-            <div className="progress">
-              <div style={{ width: `${v}%`, background: color }} />
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
+  const rows: [Zone, string, number][] = camera
+    ? [["C", "Looking at camera", Math.round((pct.L + pct.C + pct.R) * 10) / 10], ["N", names.N, pct.N], ["X", names.X, pct.X]]
+    : (["L", "C", "R", "N", "X"] as Zone[]).map((z) => [z, names[z], pct[z]]);
   return (
-    <div className="grid" style={{ gap: 8 }}>
-      {(["L", "C", "R", "N", "X"] as Zone[]).map((z) => (
-        <div key={z}>
-          <div className="row small" style={{ justifyContent: "space-between" }}>
-            <span>{names[z]}</span>
-            <span className="mono">{pct[z]}%</span>
-          </div>
-          <div className="progress">
-            <div style={{ width: `${pct[z]}%`, background: ZONE_COLOR[z] }} />
-          </div>
+    <div className="grid" style={{ gap: 0 }}>
+      {rows.map(([z, name, v]) => (
+        <div key={name} className="row small" style={{ padding: "8px 0", borderTop: "1px solid var(--hair)" }}>
+          <ZoneSwatch z={z} />
+          <span style={{ flex: 1, textTransform: "uppercase", letterSpacing: "0.06em" }}>{name}</span>
+          <SegMeter value={v / 100} tone={z === "X" || z === "N" ? "signal" : undefined} label={name} />
+          <span className="mono" style={{ width: 48, textAlign: "right" }}>{v}%</span>
         </div>
       ))}
     </div>
@@ -292,8 +370,6 @@ function smoothPath(pts: [number, number][]): string {
   return d;
 }
 
-const fmtT = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
-
 export function engagementHeadline(e: NonNullable<Summary["engagement"]>): string {
   const E = e.series.E;
   const engaged = e.engagedPct ?? (E.length ? Math.round((100 * E.filter((v) => v >= 65).length) / E.length) : 0);
@@ -313,7 +389,7 @@ export function EngagementChart({ e, duration, current, onSeek }: {
   const x = (t: number) => (t / dur) * W;
   const y = (v: number) => H - 6 - (v / 100) * (H - 12);
   const box = useRef<HTMLDivElement>(null);
-  const [hover, setHover] = useState<{ left: number; text: string } | null>(null);
+  const [hover, setHover] = useState<{ left: number; text: string; t: number; v: number } | null>(null);
   const dips: Dip[] = e.dips ?? [];
   const peak = e.peak ?? null;
 
@@ -338,7 +414,7 @@ export function EngagementChart({ e, duration, current, onSeek }: {
     // inside a dip, show its confirmed cause (the raw live signal can disagree)
     const dip = dips.find((d) => t >= d.t0 && t <= d.t1);
     const c = dip ? dip.cause : causeAt(e.series, i);
-    setHover({ left, text: `${fmtT(t)} · engagement ${e.series.E[i] ?? "–"}${c ? ` · ${CAUSE_LABEL[c]}` : ""}` });
+    setHover({ left, t, v: e.series.E[i] ?? 0, text: `${fmtT(t)} · engagement ${e.series.E[i] ?? "–"}${c ? ` · ${CAUSE_LABEL[c]}` : ""}` });
   };
   const pct = (t: number) => `${(x(t) / W) * 100}%`;
   const top = (v: number) => `${(y(v) / H) * 100}%`;
@@ -355,30 +431,29 @@ export function EngagementChart({ e, duration, current, onSeek }: {
         aria-label={engagementHeadline(e)}
       >
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-          <rect x={0} y={y(100)} width={W} height={y(65) - y(100)} fill="var(--good)" opacity={0.07} />
-          <rect x={0} y={y(35)} width={W} height={y(0) - y(35)} fill="var(--bad)" opacity={0.08} />
-          <line x1={0} x2={W} y1={y(65)} y2={y(65)} stroke="var(--good)" strokeOpacity={0.35} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-          <line x1={0} x2={W} y1={y(35)} y2={y(35)} stroke="var(--bad)" strokeOpacity={0.35} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-          {peak && <rect x={x(peak.t0)} width={Math.max(2, x(peak.t1) - x(peak.t0))} y={0} height={H} fill="var(--good)" opacity={0.07} />}
-          <path d={area} fill="url(#engFill)" />
-          <path d={line} fill="none" stroke="var(--accent)" strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
-          <line x1={x(current)} x2={x(current)} y1={0} y2={H} stroke="var(--text)" strokeOpacity={0.7} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-          <defs>
-            <linearGradient id="engFill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
+          {[20, 40, 60, 80].map((g) => (
+            <line key={g} x1={0} x2={W} y1={y(g)} y2={y(g)} stroke="var(--concrete)" strokeOpacity={0.07} vectorEffect="non-scaling-stroke" />
+          ))}
+          <rect x={0} y={y(35)} width={W} height={y(0) - y(35)} fill="url(#pat-X)" opacity={0.5} />
+          <line x1={0} x2={W} y1={y(65)} y2={y(65)} stroke="var(--good)" strokeOpacity={0.5} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+          <line x1={0} x2={W} y1={y(35)} y2={y(35)} stroke="var(--signal)" strokeOpacity={0.5} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+          {peak && <rect x={x(peak.t0)} width={Math.max(2, x(peak.t1) - x(peak.t0))} y={0} height={H} fill="var(--paper)" opacity={0.06} />}
+          {/* clip-path wipe, not dashoffset: dashes misbehave with non-scaling strokes */}
+          <path className="wipe" d={area} fill="var(--signal)" opacity={0.12} />
+          <path className="wipe" d={line} fill="none" stroke="var(--signal)" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+          <line x1={x(current)} x2={x(current)} y1={0} y2={H} stroke="var(--paper)" strokeOpacity={0.8} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+          {hover && <line x1={x(hover.t)} x2={x(hover.t)} y1={0} y2={H} stroke="var(--paper)" strokeOpacity={0.35} vectorEffect="non-scaling-stroke" />}
         </svg>
-        <span className="eng-band-label good">engaged</span>
-        <span className="eng-band-label bad">bored</span>
+        <span className="eng-band-label good">ENGAGED ≥ 65</span>
+        <span className="eng-band-label bad">BORED ≤ 35</span>
+        {hover && <span className="readout-xy mono">X {pad4(Math.floor(hover.t / 60) * 100 + Math.floor(hover.t % 60))} Y {pad4(hover.v)}</span>}
         {dips.map((d, i) => (
           <button
             key={i}
             className="eng-marker dip"
-            style={{ left: pct(d.t), top: top(d.E) }}
+            style={{ left: pct(d.t), top: top(d.E), animationDelay: `${600 + i * 80}ms` }}
             onClick={(ev) => { ev.stopPropagation(); onSeek(d.t0); }}
-            onMouseEnter={() => setHover({ left: (x(d.t) / W) * 100, text: `${fmtT(d.t)} · engagement ${d.E}${d.cause ? ` · ${CAUSE_LABEL[d.cause]}` : ""}` })}
+            onMouseEnter={() => setHover({ left: (x(d.t) / W) * 100, t: d.t, v: d.E, text: `${fmtT(d.t)} · engagement ${d.E}${d.cause ? ` · ${CAUSE_LABEL[d.cause]}` : ""}` })}
             aria-label={`Dip ${i + 1} at ${fmtT(d.t)}`}
           >
             {i + 1}
@@ -389,10 +464,10 @@ export function EngagementChart({ e, duration, current, onSeek }: {
             className="eng-marker peak"
             style={{ left: pct((peak.t0 + peak.t1) / 2), top: top(peak.E) }}
             onClick={(ev) => { ev.stopPropagation(); onSeek(peak.t0); }}
-            onMouseEnter={() => setHover({ left: (x((peak.t0 + peak.t1) / 2) / W) * 100, text: `${fmtT(peak.t0)} · engagement ${peak.E} · best stretch` })}
+            onMouseEnter={() => setHover({ left: (x((peak.t0 + peak.t1) / 2) / W) * 100, t: peak.t0, v: peak.E, text: `${fmtT(peak.t0)} · engagement ${peak.E} · best stretch` })}
             aria-label={`Best stretch at ${fmtT(peak.t0)}`}
           >
-            ★
+            P
           </button>
         )}
         {hover && (
@@ -403,9 +478,57 @@ export function EngagementChart({ e, duration, current, onSeek }: {
       </div>
       <div className="eng-axis">
         <span>0:00</span>
+        <span>{fmtT(dur / 4)}</span>
         <span>{fmtT(dur / 2)}</span>
+        <span>{fmtT((dur * 3) / 4)}</span>
         <span>{fmtT(dur)}</span>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- blueprint radar
+export function Radar({ axes, size = 300 }: { axes: [string, number][]; size?: number }) {
+  const c = size / 2, R = size / 2 - 46, n = axes.length;
+  const pt = (i: number, v: number): [number, number] => {
+    const a = -Math.PI / 2 + (i / n) * Math.PI * 2;
+    return [c + Math.cos(a) * R * (v / 100), c + Math.sin(a) * R * (v / 100)];
+  };
+  const poly = (vals: number[]) => vals.map((v, i) => pt(i, v).map((k) => k.toFixed(1)).join(",")).join(" ");
+  return (
+    <svg className="radar" viewBox={`0 0 ${size} ${size}`} role="img" aria-label={axes.map(([k, v]) => `${k} ${v}`).join(", ")}>
+      {[25, 50, 75, 100].map((r) => (
+        <polygon key={r} points={poly(axes.map(() => r))} fill="none" stroke="var(--concrete)" strokeOpacity={r === 100 ? 0.35 : 0.12} strokeDasharray={r === 100 ? undefined : "2 3"} />
+      ))}
+      {axes.map((_, i) => {
+        const [x, y] = pt(i, 100);
+        return <line key={i} x1={c} y1={c} x2={x} y2={y} stroke="var(--concrete)" strokeOpacity={0.15} />;
+      })}
+      <polygon className="poly" points={poly(axes.map(([, v]) => v))} fill="var(--signal)" fillOpacity={0.18} stroke="var(--signal)" strokeWidth={1.5} />
+      {axes.map(([k, v], i) => {
+        const [x, y] = pt(i, v), [lx, ly] = pt(i, 122);
+        return (
+          <g key={k} fontFamily="var(--mono)">
+            <rect x={x - 2.5} y={y - 2.5} width={5} height={5} fill="var(--paper)" />
+            <text x={lx} y={ly - 2} textAnchor="middle" fontSize="9" fill="var(--concrete)" letterSpacing="0.06em">{k.toUpperCase()}</text>
+            <text x={lx} y={ly + 9} textAnchor="middle" fontSize="9" fill="var(--signal)">{String(v).padStart(3, "0")}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Sparkline strip: one square bar per value (0-100). */
+export function Sparkline({ values, width = 130, height = 28 }: { values: (number | null)[]; width?: number; height?: number }) {
+  const n = Math.max(values.length, 1), bw = width / n;
+  return (
+    <svg className="spark" viewBox={`0 0 ${width} ${height}`} aria-hidden>
+      <line x1={0} x2={width} y1={height - 0.5} y2={height - 0.5} stroke="var(--concrete)" strokeOpacity={0.25} />
+      {values.map((v, i) => v == null ? null : (
+        <rect key={i} x={i * bw + 1} width={Math.max(1, bw - 2)} y={height - (v / 100) * height} height={(v / 100) * height}
+          fill={v >= 80 ? "var(--paper)" : v >= 60 ? "var(--concrete-dim)" : "var(--signal)"} />
+      ))}
+    </svg>
   );
 }

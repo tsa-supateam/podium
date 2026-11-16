@@ -2,75 +2,71 @@ import { useEffect, useState } from "react";
 import { engine } from "../../lib/engine";
 import type { SessionRow } from "../../lib/types";
 import { useApp } from "../../stores/app";
+import { Icon } from "../../ui/icons";
+import { Corners, Odometer } from "../../ui/kit";
 import AudienceScene from "../audience/Audience";
-import { SessionList } from "./History";
 
 export default function Home() {
   const { go, models } = useApp();
-  const [rows, setRows] = useState<SessionRow[]>([]);
+  const [all, setAll] = useState<SessionRow[]>([]);
   useEffect(() => {
-    engine.request<SessionRow[]>("sessions.list", { limit: 4 }).then(setRows).catch(() => {});
+    engine.request<SessionRow[]>("sessions.list", { limit: 200 }).then(setAll).catch(() => {});
   }, []);
   const missing = models ? Object.entries(models).filter(([, ok]) => !ok).map(([k]) => k) : [];
+  const scored = all.filter((r) => r.overall != null);
+  const best = scored.length ? Math.max(...scored.map((r) => r.overall!)) : 0;
+  const minutes = Math.round(all.reduce((a, r) => a + r.durationSec, 0) / 60);
+  const avg = scored.length ? Math.round(scored.reduce((a, r) => a + r.overall!, 0) / scored.length) : 0;
 
   return (
-    <div className="page">
-      <section className="hero">
-        <div className="grid" style={{ gap: 18 }}>
-          <h1>Practice in front of an audience that reacts to you.</h1>
-          <p>
-            Podium listens to your pace, filler words and vocal variety, and watches where you look. A virtual
-            audience leans in or loses interest in real time. Afterwards you answer a judge-style question or two on
-            the spot, then get a full debrief, spoken aloud.
-          </p>
-          <div className="row">
+    <div className="page home stagger">
+      <section className="home-top">
+        <div className="home-copy">
+          <h1 className="display">
+            {["Practice in front", "of an audience", "that reacts."].map((l, i) => (
+              <span className="line-mask" key={l}><span className="line" style={{ animationDelay: `${80 + i * 60}ms` }}>{l}</span></span>
+            ))}
+          </h1>
+          <p>Speak. The room reacts. Get scored on pace, fillers, voice and eye contact.</p>
+          <div className="home-ctas">
             <button className="btn primary big" onClick={() => go("setup")}>
-              Start a practice run
+              Start a practice run <Icon name="arrowR" size={14} className="arw" />
             </button>
-            <button className="btn big ghost" onClick={() => go("history")}>
-              Past sessions
+            <button className="btn ghost" onClick={() => { useApp.getState().set({ learnPath: { module: null, skill: null } }); go("learn"); }}>
+              <Icon name="learn" size={14} /> Learn
+            </button>
+            <button className="btn ghost" onClick={() => go("history")}>
+              <Icon name="history" size={14} /> Past sessions
             </button>
           </div>
-          <p className="muted small">
-            Runs entirely on this computer. No internet connection, accounts or cloud services are used.
-          </p>
           {missing.length > 0 && (
-            <p className="small" style={{ color: "var(--bad)" }}>
-              Missing models: {missing.join(", ")}. Run <code>scripts/fetch_models.py</code>.
+            <p className="small" style={{ color: "var(--bad-ink)" }}>
+              <Icon name="warn" size={14} /> Missing models: {missing.join(", ")}. Run <code>scripts/fetch_models.py</code>.
             </p>
           )}
         </div>
-        <div className="hero-art">
-          <AudienceScene demo />
-        </div>
+        <figure className="home-preview">
+          <div className="home-preview-frame">
+            <AudienceScene demo />
+          </div>
+          <Corners tone="signal" />
+          <figcaption className="micro"><span className="live-dot" /> Your audience, live</figcaption>
+        </figure>
       </section>
 
-      <section className="feature-row">
-        {[
-          ["Live pacing", "Words per minute over rolling 5-second windows, with an optimal band."],
-          ["Filler detection", "Catches um, uh, like and you know as you speak."],
-          ["Eye-contact zones", "Left, center, right audience and your notes, tracked from your webcam."],
-          ["Q&A round", "Answer questions about your own speech on the spot, then get a spoken debrief."],
-        ].map(([t, d]) => (
-          <div className="card feature" key={t}>
-            <b>{t}</b>
-            <span className="muted small">{d}</span>
+      <section className="home-stats" aria-label="Your numbers">
+        {([
+          [all.length, "Sessions", "var(--signal)"],
+          [minutes, "Minutes spoken", "var(--paper)"],
+          [best || "--", "Best score", "var(--good)"],
+          [avg || "--", "Average score", "var(--concrete-dim)"],
+        ] as const).map(([v, label, color]) => (
+          <div className="home-stat" key={label}>
+            <span className="home-stat-value" style={{ color }}><Odometer value={v} /></span>
+            <span className="micro">{label}</span>
           </div>
         ))}
       </section>
-
-      {rows.length > 0 && (
-        <section style={{ marginTop: 28 }}>
-          <div className="row" style={{ marginBottom: 10 }}>
-            <h3>Recent sessions</h3>
-            <span className="spacer" />
-            <button className="btn ghost" onClick={() => go("history")}>
-              See all
-            </button>
-          </div>
-          <SessionList rows={rows} onChange={setRows} />
-        </section>
-      )}
     </div>
   );
 }

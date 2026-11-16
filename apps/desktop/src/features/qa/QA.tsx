@@ -6,6 +6,8 @@ import type { Question } from "../../lib/types";
 import { useApp, useTicker } from "../../stores/app";
 import { STAGES } from "../live/Analyzing";
 import { finishQA, startSession } from "../live/session";
+import { Icon } from "../../ui/icons";
+import { ScreenHeader, Stepper } from "../../ui/kit";
 
 const PREP_SECONDS = 10;
 const KIND: Record<string, string> = {
@@ -66,14 +68,11 @@ function Pick() {
   };
 
   return (
-    <div className="page qa-page">
-      <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
-        <h1>Quick Q&amp;A</h1>
-        <span className="spacer" />
-      </div>
+    <div className="page qa-page stagger">
+      <ScreenHeader title="Quick Q&A" />
       <p className="muted qa-sub">Pick one or two. Answer each out loud, like a judge just asked.</p>
 
-      {error && <p style={{ color: "var(--bad)" }}>Could not build questions: {error}</p>}
+      {error && <p style={{ color: "var(--bad-ink)" }}><Icon name="warn" size={14} /> Could not build questions: {error}</p>}
       {!qa.questions && !error && (
         <div className="row muted">
           <div className="spinner small-spinner" />
@@ -82,16 +81,18 @@ function Pick() {
         </div>
       )}
 
-      <div className="qa-list">
+      <div className="qa-list scroll">
         {qa.questions?.map((q, i) => {
           const order = qa.picked.indexOf(i);
           return (
-            <button key={i} className={`qa-pick ${order >= 0 ? "on" : ""}`} onClick={() => toggle(i)} aria-pressed={order >= 0}>
-              <span className="qa-check">{order >= 0 ? order + 1 : ""}</span>
+            <button key={i} className={`qa-pick ${order >= 0 ? "on" : ""}`} onClick={() => toggle(i)} aria-pressed={order >= 0}
+              style={{ animationDelay: `${i * 40}ms` }}>
+              <span className="acc-idx micro">{String(i + 1).padStart(3, "0")}</span>
               <span>
                 <span className="kind">{KIND[q.kind] ?? q.kind}</span>
                 <span className="qa-q">{q.question}</span>
               </span>
+              <span className="qa-check">{order >= 0 ? order + 1 : <Icon name="plus" size={14} />}</span>
             </button>
           );
         })}
@@ -110,7 +111,7 @@ function Pick() {
         <button className="btn ghost" onClick={() => void finishQA()}>Skip to results</button>
         <button className="btn primary big" disabled={qa.picked.length === 0}
           onClick={() => set({ qa: { ...qa, index: 0 } })}>
-          {qa.picked.length === 0 ? "Pick a question" : qa.picked.length === 2 ? "Answer 2 questions" : "Answer 1 question"}
+          {qa.picked.length === 0 ? "Pick a question" : qa.picked.length === 2 ? "Answer 2 questions" : "Answer 1 question"} <Icon name="arrowR" size={14} className="arw" />
         </button>
       </div>
     </div>
@@ -171,13 +172,14 @@ function Prep() {
 
   return (
     <div className="center-card qa-prep">
-      <span className="muted small">Question {qa.index + 1} of {qa.picked.length} · {qa.seconds} s to answer</span>
+      <Stepper index={qa.index} total={qa.picked.length} label="QUESTION" />
+      <span className="micro">{qa.seconds} s to answer</span>
       <h2 className="qa-prep-q">{q.question}</h2>
-      <div className="qa-count">{Math.ceil(left)}</div>
+      <div className="qa-count" aria-live="off">{String(Math.ceil(left)).padStart(2, "0")}</div>
       <span className="muted small">Think about your answer. Recording starts automatically.</span>
       <div className="row">
         <button className="btn ghost" onClick={skip}>Skip this question</button>
-        <button className="btn primary" onClick={() => void begin()}>Start now</button>
+        <button className="btn primary" onClick={() => void begin()}><Icon name="rec" size={14} /> Start now</button>
       </div>
       <AnalysisStatus />
     </div>

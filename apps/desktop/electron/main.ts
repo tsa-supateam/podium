@@ -88,7 +88,11 @@ async function createWindow(): Promise<void> {
     height: 900,
     minWidth: 1100,
     minHeight: 720,
-    backgroundColor: "#0b0d12",
+    backgroundColor: "#151515",
+    icon: join(here, "..", "public", "icon.png"),
+    // no OS title bar or menu: the app's top bar is the drag area and draws its own window buttons
+    titleBarStyle: "hidden",
+    autoHideMenuBar: true,
     title: "Podium",
     webPreferences: {
       preload: join(here, "preload.cjs"),
@@ -98,6 +102,9 @@ async function createWindow(): Promise<void> {
     },
   });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  const sendMax = () => win.webContents.send("win:maximized", win.isMaximized());
+  win.on("maximize", sendMax);
+  win.on("unmaximize", sendMax);
   win.webContents.on("will-navigate", (e, url) => {
     if (!url.startsWith("app://") && !(devUrl && url.startsWith(devUrl))) e.preventDefault();
   });
@@ -106,7 +113,7 @@ async function createWindow(): Promise<void> {
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline) {
       const text: string = await win.webContents.executeJavaScript("document.body.innerText");
-      if (text.includes("Practice in front of an audience")) {
+      if (text.toLowerCase().replace(/\s+/g, " ").includes("practice in front of an audience")) {
         console.log("SMOKE OK: renderer loaded and connected to the engine");
         engine?.kill();
         app.exit(0);
@@ -139,6 +146,13 @@ app.whenReady().then(async () => {
     return engineInfo;
   });
   ipcMain.handle("open:data-folder", () => shell.openPath(join(app.getPath("appData"), "Podium")));
+  ipcMain.on("win", (e, action: unknown) => {
+    const w = BrowserWindow.fromWebContents(e.sender);
+    if (!w) return;
+    if (action === "min") w.minimize();
+    else if (action === "max") (w.isMaximized() ? w.unmaximize() : w.maximize());
+    else if (action === "close") w.close();
+  });
   await createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();

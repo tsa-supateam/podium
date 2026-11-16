@@ -17,6 +17,54 @@ export interface Avatar {
   stateAge: number;
   confusedLeft: number;
   phase: number; // animation desync
+  look: Look; // appearance only: never read by the state machine
+}
+
+export type Hair = "short" | "buzz" | "quiff" | "sidePart" | "bun" | "long" | "bob" | "ponytail";
+export type Top = "blazer" | "shirt" | "sweater" | "robe";
+export type Role = "business" | "judge" | "reporter";
+
+/** Appearance of one audience member. Tones are 0..1 picks into the renderer's palettes. */
+export interface Look {
+  skin: number;
+  hair: Hair;
+  hairTone: number;
+  glasses: boolean;
+  top: Top;
+  topTone: number;
+  shirtTone: number;
+  trouserTone: number;
+  accessory: "tie" | "lanyard" | "scarf" | null;
+  prop: "laptop" | "notebook" | "coffee" | null;
+  height: number; // ~0.94..1.06 scale
+  build: number; // ~0.9..1.12 shoulder width
+  role: Role;
+  fem: boolean; // silhouette and hair styling
+}
+
+const MASC_HAIR: Hair[] = ["short", "buzz", "quiff", "sidePart"];
+const FEM_HAIR: Hair[] = ["bun", "long", "bob", "ponytail"];
+const TOPS: Top[] = ["blazer", "blazer", "shirt", "sweater"];
+
+/** Seeded appearance, on its own random stream so behaviour (theta, phase) is unchanged. */
+function makeLook(r: () => number): Look {
+  const pick = <T,>(xs: T[]) => xs[Math.floor(r() * xs.length) % xs.length];
+  const fem = r() < 0.48;
+  const rr = r();
+  const role: Role = rr < 0.14 ? "judge" : rr < 0.32 ? "reporter" : "business";
+  const top = role === "judge" ? "robe" : pick(TOPS);
+  const acc = r();
+  const prop = r();
+  return {
+    skin: r(), hair: pick(fem ? FEM_HAIR : MASC_HAIR), hairTone: r(), glasses: r() < 0.25, top,
+    topTone: r(), shirtTone: r(), trouserTone: r(),
+    accessory: role === "reporter" ? "lanyard" : role === "judge" ? null
+      : top === "blazer" && !fem && acc < 0.55 ? "tie" : acc > 0.9 ? "lanyard" : acc < 0.07 ? "scarf" : null,
+    prop: role === "judge" ? "notebook"
+      : role === "reporter" ? (prop < 0.35 ? "laptop" : "notebook")
+      : prop < 0.5 ? "laptop" : prop < 0.65 ? "notebook" : prop < 0.8 ? "coffee" : null,
+    height: 0.96 + r() * 0.1, build: fem ? 0.86 + r() * 0.08 : 1.0 + r() * 0.12, role, fem,
+  };
 }
 
 /** Deterministic PRNG so the same audience appears every run (mulberry32). */
@@ -38,6 +86,7 @@ function gauss(r: () => number): number {
 
 export function makeAudience(size = 15, seed = 7): Avatar[] {
   const r = rng(seed);
+  const lr = rng(seed ^ 0x9e3779b9);
   const sections: Section[] = ["L", "C", "R"];
   const perSection = Math.ceil(size / 3);
   const seatsPerRow = Math.min(3, perSection);
@@ -48,7 +97,7 @@ export function makeAudience(size = 15, seed = 7): Avatar[] {
       out.push({
         id: id++, section, row: Math.floor(k / seatsPerRow), seat: k % seatsPerRow,
         theta: Math.max(-0.2, Math.min(0.2, 0.08 * gauss(r))), hue: r(), b: 0.3, state: "neutral",
-        heldFor: 0, stateAge: 0, confusedLeft: 0, phase: r() * Math.PI * 2,
+        heldFor: 0, stateAge: 0, confusedLeft: 0, phase: r() * Math.PI * 2, look: makeLook(lr),
       });
     }
   }
