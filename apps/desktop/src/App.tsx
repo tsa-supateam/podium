@@ -277,8 +277,49 @@ function TopBar() {
           </button>
         )}
       </div>
+      <SettingsMenu />
       <WindowControls />
     </header>
+  );
+}
+
+/** App settings that aren't about one run (Setup holds those): currently Judge Demo Mode. */
+function SettingsMenu() {
+  const demo = useApp((s) => s.settings.demoMode);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [open]);
+  const toggle = () => {
+    useApp.getState().setSettings({ demoMode: !demo });
+    useApp.getState().set({ toast: !demo ? "Judge demo mode on: every Learn module unlocked with sample progress" : "Judge demo mode off: your real progress is back" });
+  };
+  return (
+    <div className="settings-menu" ref={ref}>
+      <button className={`settings-btn ${demo ? "demo" : ""}`} onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Settings" title="Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />
+        </svg>
+        {demo && <span className="demo-dot" />}
+      </button>
+      {open && (
+        <div className="settings-pop" role="dialog" aria-label="Settings">
+          <span className="micro">Settings</span>
+          <label className="switch-row">
+            <span>
+              <b>Judge demo mode</b>
+              <span className="muted small">Unlocks every Learn module and fills it with sample progress, so any part can be tried in seconds. Your real progress isn't changed.</span>
+            </span>
+            <button role="switch" aria-checked={demo} className={`switch ${demo ? "on" : ""}`} onClick={toggle}><i /></button>
+          </label>
+        </div>
+      )}
+    </div>
   );
 }
 

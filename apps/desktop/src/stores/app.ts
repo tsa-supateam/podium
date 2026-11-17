@@ -45,6 +45,7 @@ export interface Settings {
   audioDevice: string | null; // browser deviceId
   notes: boolean; // speaking with notes/slides (false: looking down counts as looking away)
   difficulty: "coach" | "judge"; // shown as Practice / Assessment: practice adds live cues and encouraging results
+  demoMode: boolean; // Judge Demo Mode: Learn shows every module unlocked with sample progress
 }
 
 interface AppState {
@@ -103,6 +104,7 @@ export const useApp = create<AppState>((set, get) => ({
     audioDevice: null,
     notes: true,
     difficulty: "coach",
+    demoMode: false,
     ...savedSettings(),
   },
   calibrated: false,

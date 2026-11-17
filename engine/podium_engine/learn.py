@@ -103,9 +103,18 @@ def lessons_done() -> list[str]:
     return (_load(_lessons_file()) or {}).get("lessons", [])
 
 
+def lesson_times() -> dict[str, str]:
+    return (_load(_lessons_file()) or {}).get("lessonAt", {})
+
+
 def mark_lesson(lesson_id: str, done: bool = True) -> list[str]:
+    from datetime import UTC, datetime
+
     done_ids = [x for x in lessons_done() if x != lesson_id] + ([lesson_id] if done else [])
-    _lessons_file().write_text(json.dumps({"lessons": done_ids}))
+    times = {k: v for k, v in lesson_times().items() if k in done_ids}
+    if done:
+        times.setdefault(lesson_id, datetime.now(UTC).isoformat())
+    _lessons_file().write_text(json.dumps({"lessons": done_ids, "lessonAt": times}))
     return done_ids
 
 
@@ -113,11 +122,14 @@ def status() -> dict:
     """Practice attempts per check, and how each check did in the last 3 full runs."""
     attempts: dict[str, list[dict]] = {k: [] for k in CHECKS}
     runs: list[dict] = []
+    activity: list[str] = list(lesson_times().values())  # when you did something, for streaks
     root = sessions_dir()
     for d in sorted(p for p in root.iterdir() if p.is_dir()) if root.exists() else []:
         meta, summary = _load(d / "session.json"), _load(d / "summary.json")
         if not meta or not summary or meta.get("status") != "analyzed" or meta.get("mode") in ("qa", "replay"):
             continue
+        if meta.get("createdAt"):
+            activity.append(meta["createdAt"])
         drill = meta.get("drill")
         if drill in CHECKS:
             r = evaluate(drill, summary)
@@ -128,6 +140,7 @@ def status() -> dict:
     recent = runs[-3:]
     return {
         "lessons": lessons_done(),
+        "activity": sorted(activity)[-400:],
         "checks": {k: {"attempts": attempts[k][-10:],
                        "recent": [r for r in (evaluate(k, s) for s in recent) if r]} for k in CHECKS},
     }

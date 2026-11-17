@@ -603,6 +603,8 @@ export interface CheckStatus {
 }
 export interface LearnStatus {
   lessons: string[];
+  /** When you did something (lessons, practices, runs), for the daily streak. */
+  activity?: string[];
   checks: Record<string, CheckStatus>;
 }
 

@@ -181,7 +181,7 @@ class Server:
                 None, quick_questions, storage.session_path(d["sessionId"]), int(d.get("k", 5)))
             await self.reply(ev, "questions", qs)
         elif t == "tts.speak":
-            await self.speak(ev, str(d["text"])[:500])
+            await self.speak(ev, str(d["text"])[:500], d.get("style") if d.get("style") in ("weak", "strong") else None)
         elif t == "file.get":
             await self.send_file(ev, d["sessionId"], d["name"])
         else:
@@ -319,7 +319,7 @@ class Server:
         pm.setdefault("answers", []).append({"sessionId": child, "question": question})
         storage.write_json(pf, pm)
 
-    async def speak(self, ev: dict, text: str) -> None:
+    async def speak(self, ev: dict, text: str, style: str | None = None) -> None:
         """Synthesize short text with Piper (cached by content) and return the WAV as a binary frame."""
         import hashlib
 
@@ -328,9 +328,9 @@ class Server:
 
         cache = data_dir() / "tts_cache"
         cache.mkdir(exist_ok=True)
-        f = cache / (hashlib.sha1(text.encode()).hexdigest()[:16] + ".wav")
+        f = cache / (hashlib.sha1(f"{style or ''}|{text}".encode()).hexdigest()[:16] + ".wav")
         if not f.exists():
-            await asyncio.get_running_loop().run_in_executor(None, tts.synthesize, text, f)
+            await asyncio.get_running_loop().run_in_executor(None, tts.synthesize, text, f, style)
         assert self.client is not None
         await self.client.send(pack_binary({"type": "file", "id": ev.get("id"), "name": f.name}, f.read_bytes()))
 

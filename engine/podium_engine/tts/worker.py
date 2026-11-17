@@ -10,8 +10,10 @@ from piper import PiperVoice, SynthesisConfig
 def main() -> None:
     job = json.loads(sys.stdin.read())
     voice = PiperVoice.load(job["model"])
-    cfg = SynthesisConfig(length_scale=job.get("length_scale", 1.0))
+    base = {"length_scale": job.get("length_scale", 1.0)}
     for item in job["items"]:
+        # per-item delivery style (speed, expressiveness, volume), e.g. a weak vs strong example
+        cfg = SynthesisConfig(**{**base, **(item.get("style") or {})})
         with wave.open(item["out"], "wb") as wf:
             voice.synthesize_wav(item["text"], wf, syn_config=cfg)
 

@@ -9,30 +9,49 @@ import { useApp } from "../../stores/app";
 import {
   MASTERY, MODULES, type LearnStatus, type Mastery, type Module, type Skill, mastery, moduleProgress, skillById,
 } from "./curriculum";
+import { TREE, XP, demoStatus, level, lockReason, streak, testClaim, unlocked, xpOf } from "./game";
 import { Icon, MODULE_ICON } from "../../ui/icons";
-import { ScreenHeader, SegMeter, Stepper, StatTile } from "../../ui/kit";
+import { ScreenHeader, Stepper } from "../../ui/kit";
 
-function useLearnStatus(): [LearnStatus | null, (s: LearnStatus) => void] {
+function useLearnStatus(): [LearnStatus | null, (s: LearnStatus) => void, boolean] {
+  const demo = useApp((s) => !!s.settings.demoMode);
   const [st, setSt] = useState<LearnStatus | null>(null);
+  const [demoSt, setDemoSt] = useState<LearnStatus>(() => demoStatus());
   useEffect(() => {
     engine.request<LearnStatus>("learn.status", {}).then(setSt).catch(() => setSt({ lessons: [], checks: {} }));
   }, []);
-  return [st, setSt];
+  // Judge Demo Mode: rich made-up progress, kept in memory only (your real progress is untouched)
+  return demo ? [demoSt, setDemoSt, true] : [st, setSt, false];
 }
+
+/** Depth of a Learn view: course 0, module 1, skill 2 (for the zoom direction). */
+const depthOf = (p: { module: string | null; skill: string | null }) => (p.skill ? 2 : p.module ? 1 : 0);
+let origin = "50% 30%"; // where the last click was, so a view zooms out of the node you picked
 
 export default function Learn() {
   const path = useApp((s) => s.learnPath);
-  const [st, setSt] = useLearnStatus();
+  const [st, setSt, demo] = useLearnStatus();
   const skill = path.skill ? skillById(path.skill) : null;
   const mod = MODULES.find((m) => m.id === (skill?.module.id ?? path.module)) ?? null;
-  if (skill && mod) return <SkillPage mod={mod} skill={skill} st={st} setSt={setSt} />;
-  if (mod) return <ModulePage mod={mod} st={st} />;
-  return <Course st={st} />;
+  const depth = depthOf(path);
+  const prev = useRef(depth);
+  const dir = depth >= prev.current ? "in" : "out";
+  useEffect(() => {
+    prev.current = depth;
+  }, [depth]);
+  const key = `${path.module ?? ""}/${path.skill ?? ""}`;
+  return (
+    <div key={key} className={`learn-view zoom-${dir}`} style={{ transformOrigin: origin }}>
+      {skill && mod ? <SkillPage mod={mod} skill={skill} st={st} setSt={setSt} demo={demo} />
+        : mod ? <ModulePage mod={mod} st={st} demo={demo} />
+        : <Course st={st} demo={demo} />}
+    </div>
+  );
 }
 
-const nav = (module: string | null, skill: string | null = null) => {
+const nav = (module: string | null, skill: string | null = null, e?: { clientX: number; clientY: number }) => {
+  origin = e ? `${Math.round((e.clientX / innerWidth) * 100)}% ${Math.round((e.clientY / innerHeight) * 100)}%` : "50% 30%";
   useApp.getState().set({ learnPath: { module, skill } });
-  window.scrollTo(0, 0);
 };
 
 function MasteryChip({ m }: { m: Mastery }) {
@@ -58,10 +77,40 @@ function ModuleIcon({ mod, size = 44 }: { mod: Module; size?: number }) {
   );
 }
 
+/** Glowing circular progress meter; the arc draws itself in on mount. */
+export function Ring({ value, size = 120, stroke = 8, children, tone = "signal" }: {
+  value: number; size?: number; stroke?: number; children?: React.ReactNode; tone?: "signal" | "good" | "dim";
+}) {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  const color = tone === "good" ? "var(--good)" : tone === "dim" ? "var(--concrete-dim)" : "var(--learn-accent)";
+  return (
+    <span className="ring" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--charcoal-600)" strokeWidth={stroke} />
+        {Array.from({ length: 40 }, (_, i) => {
+          const a = (i / 40) * 2 * Math.PI - Math.PI / 2;
+          return <line key={i} x1={size / 2 + Math.cos(a) * (r - stroke)} y1={size / 2 + Math.sin(a) * (r - stroke)}
+            x2={size / 2 + Math.cos(a) * (r - stroke - 3)} y2={size / 2 + Math.sin(a) * (r - stroke - 3)}
+            stroke="var(--concrete)" strokeOpacity={0.18} strokeWidth={1} />;
+        })}
+        <circle className="ring-arc" cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+          strokeLinecap="butt" strokeDasharray={c} style={{ ["--ring-off" as string]: c * (1 - Math.max(0, Math.min(1, value))), ["--ring-c" as string]: c }}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`} filter={value > 0 ? "url(#ring-glow)" : undefined} />
+        <defs>
+          <filter id="ring-glow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="2.5" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+      </svg>
+      <span className="ring-body">{children}</span>
+    </span>
+  );
+}
 
 // ---------------------------------------------------------------- course overview
-function Course({ st }: { st: LearnStatus | null }) {
-  // scrolling up past the top of the module list warps back to Home
+function Course({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
+  // scrolling up past the top of the skill tree warps back to Home
   const gridRef = useRef<HTMLDivElement>(null);
   const onWheel = useMemo(() => wheelWarp("home", -1, () => (gridRef.current?.scrollTop ?? 0) <= 0), []);
   const [last, setLast] = useState<SessionRow | null>(null);
@@ -70,25 +119,57 @@ function Course({ st }: { st: LearnStatus | null }) {
       .then((rows) => setLast(rows.find((r) => r.overall != null && !r.title.startsWith("Practice:")) ?? null))
       .catch(() => {});
   }, []);
-  // Recommend the module behind the weakest score of your latest full run.
+  // Recommend the module behind the weakest score of your latest full run (or what unlocks it).
   const scores = (last?.scores ?? {}) as Record<string, number | null>;
-  const rec = [...MODULES]
+  const weakest = [...MODULES]
     .filter((m) => m.scoreKeys.some((k) => scores[k] != null))
     .sort((a, b) => Math.min(...a.scoreKeys.map((k) => scores[k] ?? 101)) - Math.min(...b.scoreKeys.map((k) => scores[k] ?? 101)))[0];
+  const rec = weakest && !unlocked(weakest, st, demo)
+    ? MODULES.find((m) => TREE[weakest.id].needs.includes(m.id) && unlocked(m, st, demo)) ?? weakest : weakest;
   const total = Math.round(MODULES.reduce((a, m) => a + moduleProgress(m, st), 0) / MODULES.length);
+  const xp = xpOf(st), lv = level(xp);
+  const sk = streak(st?.activity);
+  const passed = Object.values(st?.checks ?? {}).filter((c) => c.attempts.some((a) => a.passed)).length;
 
   return (
     <div className="page learn stagger" onWheel={onWheel}>
-      <ScreenHeader title="Learn" />
-      <div className="tiles">
-        <StatTile value={`${total}%`} label="Course mastery" tone="signal" sub={<SegMeter value={total / 100} />} />
-        <StatTile value={MODULES.length} label="Modules" />
-        <StatTile value={st?.lessons.length ?? 0} label="Lessons read" tone="paper" />
-        <StatTile value={Object.values(st?.checks ?? {}).filter((c) => c.attempts.some((a) => a.passed)).length} label="Practices passed" tone="concrete" />
-      </div>
+      <ScreenHeader title="Learn" meta={demo ? ["Judge demo mode: sample progress"] : undefined} />
+      <section className="learn-hud">
+        <div className="hud-ring">
+          <Ring value={total / 100} size={132} stroke={9}>
+            <b className="ring-value">{total}<small>%</small></b>
+            <span className="micro">Mastery</span>
+          </Ring>
+        </div>
+        <div className="hud-xp">
+          <div className="row" style={{ gap: 10, alignItems: "baseline" }}>
+            <span className="hud-level">LV {String(lv.level).padStart(2, "0")}</span>
+            <b className="hud-rank">{lv.rank}</b>
+            <span className="spacer" />
+            <span className="micro">{xp.toLocaleString()} XP</span>
+          </div>
+          <div className="xp-bar" role="meter" aria-label="XP to next level" aria-valuenow={lv.into} aria-valuemax={lv.need}>
+            <span style={{ width: `${(lv.into / lv.need) * 100}%` }} />
+          </div>
+          <span className="micro">{lv.need - lv.into} XP to LV {String(lv.level + 1).padStart(2, "0")} · lesson +{XP.lesson} · pass +{XP.pass} · mastered +{XP.mastered}</span>
+          <div className="hud-stats">
+            <span><b>{st?.lessons.length ?? 0}</b><span className="micro">lessons</span></span>
+            <span><b>{passed}</b><span className="micro">practices passed</span></span>
+            <span><b>{MODULES.filter((m) => unlocked(m, st, demo)).length}/{MODULES.length}</b><span className="micro">modules unlocked</span></span>
+          </div>
+        </div>
+        <div className={`hud-streak ${sk.days ? "lit" : ""}`} title={sk.today ? "You practiced today" : sk.days ? "Practice today to keep your streak" : "Practice today to start a streak"}>
+          <Flame lit={sk.days > 0} />
+          <b>{sk.days}</b>
+          <span className="micro">day streak</span>
+          <span className="streak-week">
+            {sk.week.map((on, i) => <i key={i} className={on ? "on" : ""} />)}
+          </span>
+        </div>
+      </section>
 
       {rec && (
-        <button className="learn-rec" onClick={() => nav(rec.id)}>
+        <button className="learn-rec" onClick={(e) => nav(rec.id, null, e)}>
           <ModuleIcon mod={rec} />
           <span>
             <span className="learn-rec-kicker">Recommended from your last run</span>
@@ -100,39 +181,79 @@ function Course({ st }: { st: LearnStatus | null }) {
         </button>
       )}
 
-      <div className="module-grid scroll" ref={gridRef}>
-        {MODULES.map((m) => {
-          const pct = moduleProgress(m, st);
-          return (
-            <button key={m.id} className="module-card" onClick={() => nav(m.id)}>
-              <div className="row" style={{ gap: 12 }}>
-                <ModuleIcon mod={m} />
-                <span>
-                  <b className="module-title">{m.title}</b>
-                  <span className="micro">{String(m.skills.length).padStart(2, "0")} skills</span>
-                </span>
-              </div>
-              <p className="muted small module-blurb">{m.blurb}</p>
-              <span className="module-improves small">Improves: {m.improves}</span>
-              <div className="module-foot">
-                <MasterySquares mod={m} st={st} />
-                <span className="micro">{String(pct).padStart(3, "0")}%</span>
-              </div>
-            </button>
-          );
-        })}
+      <div className="skill-tree-wrap scroll" ref={gridRef}>
+        <SkillTree st={st} demo={demo} />
       </div>
     </div>
   );
 }
 
+function Flame({ lit }: { lit: boolean }) {
+  return (
+    <svg className={`flame ${lit ? "lit" : ""}`} width="30" height="36" viewBox="0 0 24 30" aria-hidden>
+      <path d="M12 1c1 5 7 8 7 16a7 7 0 0 1-14 0c0-4 2-6 3-8 0 3 1 5 3 5-1-5 0-9 1-13z" fill="currentColor" />
+      <path d="M12 14c.5 3 3.5 4 3.5 8a3.5 3.5 0 0 1-7 0c0-2 1-3 1.5-4 .3 1.5 1 2.2 2 2.2-.4-2.6 0-4.5 0-6.2z" fill="var(--paper)" opacity="0.85" />
+    </svg>
+  );
+}
+
+/** Interconnected skill tree: argument branch on top, delivery below; paths glow once unlocked. */
+function SkillTree({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
+  const cols = 3, rows = 4;
+  const X = (c: number) => 9 + (c / (cols - 1)) * 64; // percent; leaves room for the right column's labels
+  const Y = (r: number) => 11 + (r / (rows - 1)) * 78;
+  const edges = MODULES.flatMap((m) => TREE[m.id].needs.map((from) => ({ from, to: m.id, live: unlocked(m, st, demo) })));
+  return (
+    <div className="skill-tree" role="list" aria-label="Skill tree">
+      <span className="tree-branch micro" style={{ top: `${Y(0) - 9}%` }}>Branch A / Argument</span>
+      <span className="tree-branch micro" style={{ top: `${Y(2) - 9}%` }}>Branch B / Delivery</span>
+      <svg className="tree-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+        {edges.map(({ from, to, live }) => {
+          const a = TREE[from], b = TREE[to];
+          const x1 = X(a.col), y1 = Y(a.row), x2 = X(b.col), y2 = Y(b.row), mx = (x1 + x2) / 2;
+          const d = `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+          return (
+            <g key={`${from}-${to}`} className={live ? "live" : ""}>
+              <path d={d} className="link-base" vectorEffect="non-scaling-stroke" />
+              {live && <path d={d} className="link-flow" pathLength={100} vectorEffect="non-scaling-stroke" />}
+            </g>
+          );
+        })}
+      </svg>
+      {MODULES.map((m, i) => {
+        const t = TREE[m.id];
+        const open = unlocked(m, st, demo);
+        const pct = moduleProgress(m, st);
+        return (
+          <button key={m.id} role="listitem" className={`tree-node ${open ? "open" : "locked"} ${pct >= 100 ? "maxed" : ""}`}
+            style={{ left: `${X(t.col)}%`, top: `${Y(t.row)}%`, animationDelay: `${120 + i * 50}ms` }}
+            onClick={(e) => nav(m.id, null, e)} title={open ? m.improves : lockReason(m)}>
+            <Ring value={pct / 100} size={64} stroke={4} tone={pct >= 100 ? "good" : open ? "signal" : "dim"}>
+              {open ? <Icon name={MODULE_ICON[m.id] ?? "target"} size={22} /> : <Icon name="lock" size={18} />}
+            </Ring>
+            <span className="node-text">
+              <b>{m.title}</b>
+              <span className="micro">{open ? `${pct}% · ${m.skills.length} skills` : "Locked"}</span>
+              <MasterySquares mod={m} st={st} />
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- module page
-function ModulePage({ mod, st }: { mod: Module; st: LearnStatus | null }) {
+function ModulePage({ mod, st, demo }: { mod: Module; st: LearnStatus | null; demo: boolean }) {
+  const open = unlocked(mod, st, demo);
   return (
     <div className="page learn stagger">
       <ScreenHeader title={mod.title}>
         <button className="btn ghost" onClick={() => nav(null)}><Icon name="arrowL" size={14} /> All modules</button>
       </ScreenHeader>
+      {!open && (
+        <div className="lock-banner"><Icon name="lock" size={14} /> {lockReason(mod)}. You can read the lessons now; practices open once it's unlocked.</div>
+      )}
       <div className="module-head">
         <ModuleIcon mod={mod} size={64} />
         <div>
@@ -140,8 +261,9 @@ function ModulePage({ mod, st }: { mod: Module; st: LearnStatus | null }) {
           <span className="module-improves small">Improves: {mod.improves}</span>
         </div>
         <div className="learn-total">
-          <b>{moduleProgress(mod, st)}%</b>
-          <span className="micro">module mastery</span>
+          <Ring value={moduleProgress(mod, st) / 100} size={84} stroke={6}>
+            <b className="ring-value small">{moduleProgress(mod, st)}<small>%</small></b>
+          </Ring>
           <MasterySquares mod={mod} st={st} />
         </div>
       </div>
@@ -159,13 +281,13 @@ function ModulePage({ mod, st }: { mod: Module; st: LearnStatus | null }) {
                 <b className="skill-title">{s.title}</b>
                 <MasteryChip m={m} />
               </div>
-              <button className="skill-item" onClick={() => nav(mod.id, s.id)}>
+              <button className="skill-item" onClick={(e) => nav(mod.id, s.id, e)}>
                 <span className={`item-dot ${lessonDone ? "done" : ""}`}><Icon name={lessonDone ? "check" : "book"} size={14} /></span>
                 <span>Lesson: {s.title}</span>
                 <span className="spacer" />
                 <span className="muted small">{lessonDone ? "Read" : "2 min read"}</span>
               </button>
-              <button className="skill-item" onClick={() => nav(mod.id, s.id)}>
+              <button className="skill-item" onClick={(e) => nav(mod.id, s.id, e)}>
                 <span className={`item-dot ${passed ? "done" : ""}`}><Icon name={passed ? "check" : "mic"} size={14} /></span>
                 <span>Practice: {s.practice.target}</span>
                 <span className="spacer" />
@@ -180,8 +302,9 @@ function ModulePage({ mod, st }: { mod: Module; st: LearnStatus | null }) {
 }
 
 // ---------------------------------------------------------------- skill page
-function SkillPage({ mod, skill, st, setSt }: { mod: Module; skill: Skill; st: LearnStatus | null; setSt: (s: LearnStatus) => void }) {
+function SkillPage({ mod, skill, st, setSt, demo }: { mod: Module; skill: Skill; st: LearnStatus | null; setSt: (s: LearnStatus) => void; demo: boolean }) {
   const { set, go, settings } = useApp();
+  const open = unlocked(mod, st, demo);
   const m = mastery(skill, st);
   const c = st?.checks[skill.check];
   const lessonDone = !!st?.lessons.includes(skill.id);
@@ -192,8 +315,12 @@ function SkillPage({ mod, skill, st, setSt }: { mod: Module; skill: Skill; st: L
   const fmt = (v: number | null) => (v == null ? "–" : P.unit ? P.unit(v) : String(v));
 
   const markRead = async (done: boolean) => {
+    if (demo) { // demo progress lives in memory only
+      if (st) setSt({ ...st, lessons: done ? [...st.lessons, skill.id] : st.lessons.filter((x) => x !== skill.id) });
+      return;
+    }
     const r = await engine.request<{ lessons: string[] }>("learn.lesson", { lessonId: skill.id, done });
-    if (st) setSt({ ...st, lessons: r.lessons });
+    if (st) setSt({ ...st, lessons: r.lessons, activity: done ? [...(st.activity ?? []), new Date().toISOString()] : st.activity });
   };
   const practice = () => {
     set({ drill: { skill: skill.id, check: skill.check, prompt: P.prompt, seconds: P.seconds } });
@@ -227,8 +354,14 @@ function SkillPage({ mod, skill, st, setSt }: { mod: Module; skill: Skill; st: L
           ))}
           {L.example && (
             <div className="lesson-example">
-              <div className="ex weak"><span className="tag bad">Weak</span><p>“{L.example.weak}”</p></div>
-              <div className="ex strong"><span className="tag good">Strong</span><p>“{L.example.strong}”</p></div>
+              <div className="ex weak">
+                <div className="ex-head"><span className="tag bad">Weak</span><ListenButton text={L.example.weak} style="weak" /></div>
+                <p>“{L.example.weak}”</p>
+              </div>
+              <div className="ex strong">
+                <div className="ex-head"><span className="tag good">Strong</span><ListenButton text={L.example.strong} style="strong" /></div>
+                <p>“{L.example.strong}”</p>
+              </div>
               <p className="muted small">{L.example.why}</p>
             </div>
           )}
@@ -251,7 +384,12 @@ function SkillPage({ mod, skill, st, setSt }: { mod: Module; skill: Skill; st: L
               <b>{P.prompt}</b>
             </div>
             <p className="small"><span className="muted">To pass:</span> {P.target}</p>
-            <button className="btn primary big" onClick={practice}><Icon name="mic" size={14} /> Start practice <Icon name="arrowR" size={14} className="arw" /></button>
+            <ClaimTester prompt={P.prompt} />
+            {open ? (
+              <button className="btn primary big" onClick={practice}><Icon name="mic" size={14} /> Start practice <Icon name="arrowR" size={14} className="arw" /></button>
+            ) : (
+              <div className="lock-banner"><Icon name="lock" size={14} /> {lockReason(mod)}</div>
+            )}
             {settings.difficulty === "judge" && <p className="muted small">Runs in Assessment mode, like your setting.</p>}
           </section>
 
@@ -284,6 +422,82 @@ function SkillPage({ mod, skill, st, setSt }: { mod: Module; skill: Skill; st: L
         </aside>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- listen (local TTS)
+const voices = new Map<string, Promise<string>>();
+function exampleVoice(text: string, style: "weak" | "strong"): Promise<string> {
+  const k = `${style}|${text}`;
+  if (!voices.has(k)) {
+    const p = engine.request<ArrayBuffer>("tts.speak", { text, style }, 60000)
+      .then((buf) => URL.createObjectURL(new Blob([buf], { type: "audio/wav" })));
+    p.catch(() => voices.delete(k));
+    voices.set(k, p);
+  }
+  return voices.get(k)!;
+}
+let playing: HTMLAudioElement | null = null;
+
+/** Reads an example aloud with the on-device voice: slow and flat for Weak, brisk and lively for Strong. */
+function ListenButton({ text, style }: { text: string; style: "weak" | "strong" }) {
+  const [state, setState] = useState<"idle" | "loading" | "playing">("idle");
+  const audio = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => () => audio.current?.pause(), []);
+  const toggle = async () => {
+    if (state === "playing") {
+      audio.current?.pause();
+      setState("idle");
+      return;
+    }
+    setState("loading");
+    try {
+      const url = await exampleVoice(text, style);
+      playing?.pause(); // one example at a time
+      const a = new Audio(url);
+      audio.current = playing = a;
+      a.onended = a.onpause = () => setState("idle");
+      await a.play();
+      setState("playing");
+    } catch {
+      setState("idle");
+      useApp.getState().set({ toast: "The on-device voice isn't available (run make setup to fetch it)." });
+    }
+  };
+  return (
+    <button className={`listen-btn ${state}`} onClick={() => void toggle()} aria-pressed={state === "playing"}
+      title={style === "weak" ? "Hear it said weakly" : "Hear it said with conviction"}>
+      <Icon name={state === "playing" ? "stop" : "speaker"} size={12} />
+      {state === "loading" ? "Synthesizing…" : state === "playing" ? "Stop" : "Listen"}
+      <span className="wave" aria-hidden>{Array.from({ length: 5 }, (_, i) => <i key={i} style={{ animationDelay: `${i * 90}ms` }} />)}</span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------- claim tester
+/** "Test your claim first": instant on-device feedback on a drafted claim before recording. */
+function ClaimTester({ prompt }: { prompt: string }) {
+  const [text, setText] = useState("");
+  const { checks, verdict } = useMemo(() => testClaim(text, prompt), [text, prompt]);
+  return (
+    <details className="claim-tester">
+      <summary><Icon name="target" size={14} /> Test your claim first <span className="micro">optional</span></summary>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={400}
+        placeholder="Type the one sentence you'll open with…" aria-label="Your drafted claim" />
+      {text.trim() && (
+        <div className="claim-result" aria-live="polite">
+          <span className={`claim-verdict ${verdict.tone}`}>{verdict.label}</span>
+          <ul>
+            {checks.map((c) => (
+              <li key={c.label} className={c.tone}>
+                <Icon name={c.tone === "good" ? "check" : c.tone === "bad" ? "cross" : "warn"} size={12} />
+                <b>{c.label}</b> <span className="muted">{c.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </details>
   );
 }
 

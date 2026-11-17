@@ -11,7 +11,6 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { countStates, makeAudience, stepAudience, type Avatar, type Look } from "../../lib/audienceModel";
 import { micLevelDb } from "../../lib/mic";
 import { live as liveData } from "../../stores/app";
-import { COUNTER, OUTER } from "../../ui/logo";
 import { reducedMotion } from "../../ui/motion";
 
 export const audienceStats = { counts: { engaged: 0, neutral: 0, bored: 0, confused: 0 } };
@@ -601,26 +600,28 @@ function drawAtlas(cv: HTMLCanvasElement) {
   ["A", "B", "C"].forEach((l, i) => ctx.fillText(l, i * 64 + 32, 128));
   ctx.font = "700 44px 'Chakra Petch', sans-serif";
   ctx.fillText("EXIT", 352, 128);
-  // logo for the LED wall and the lectern engraving
+  // logo for the LED wall and the lectern engraving: the half-filled circle mark (◐) used in the top bar
   const logo = (x: number, y: number, s: number) => {
-    const path = (pts: string) => `M${pts.replace(/ /g, "L")}Z`;
-    const p = new Path2D(`${path(OUTER)}${path(COUNTER)}`);
+    const r = s / 2, cx = x + r, cy = y + r, lw = Math.max(4, s * 0.09);
     ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(s / 64, s / 64);
-    ctx.fill(p, "evenodd");
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - lw / 2, Math.PI / 2, (3 * Math.PI) / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - lw / 2, 0, Math.PI * 2);
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = ctx.fillStyle;
+    ctx.stroke();
     ctx.restore();
   };
   ctx.fillStyle = SIGNAL;
-  logo(40, 232, 300);
+  logo(70, 279, 210);
   ctx.fillStyle = C.paper;
   ctx.textAlign = "left";
-  ctx.font = "700 92px 'Chakra Petch', sans-serif";
-  ctx.fillText("PODIUM", 370, 350);
-  ctx.font = "500 28px 'JetBrains Mono', monospace";
-  ctx.fillText("SPEECH.LAB / v0.1", 374, 430);
-  ctx.fillStyle = C.paper;
-  logo(780, 210, 180);
+  ctx.font = "700 120px -apple-system, system-ui, 'Segoe UI', sans-serif";
+  ctx.fillText("Podium", 320, 390);
+  logo(810, 240, 120);
 }
 
 const RECT = {
