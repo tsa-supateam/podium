@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cameraStream, startCamera, tracker } from "../../lib/camera";
 import { listMics, micLevelDb, startMic } from "../../lib/mic";
 import { CATEGORIES, randomPrompt } from "../../lib/prompts";
@@ -57,14 +57,14 @@ export default function Setup() {
 
   const camera = settings.gazeMode === "camera";
   const drill = useApp((s) => s.drill);
+  const fit = useFitToHeight();
   return (
-    <div className="page stagger">
+    <div className={`page setup-page ${fit.tooSmall ? "fit-scroll" : ""}`} ref={fit.outer}>
+     <div className="setup-fit stagger" ref={fit.inner} style={{ zoom: fit.zoom }}>
       <ScreenHeader title={drill ? "Set up your practice" : "Set up"} />
 
-      {drill ? <DrillCard /> : <PromptPicker />}
-
       <div className="setup">
-        <div className="grid scroll" style={{ alignContent: "start" }}>
+        <div className="setup-col">
           <div className="preview">
             <video ref={videoRef} autoPlay muted playsInline />
             <Corners tone="signal" />
@@ -82,31 +82,6 @@ export default function Setup() {
             </div>
           </div>
           {camErr && <p style={{ color: "var(--bad)" }}>Camera unavailable: {camErr}. Eye contact will not be scored.</p>}
-          <details className="card readout">
-            <summary className="row" style={{ justifyContent: "space-between" }}>
-              <span className="micro">Gaze readout</span>
-              <span className="muted small mono">
-                {tracker.fps.toFixed(0)} fps · {tracker.inferMs.toFixed(1)} ms/frame
-              </span>
-            </summary>
-            <div className="kv mono" style={{ marginTop: 10 }}>
-              <span>Head yaw / pitch</span>
-              <span>{g?.face ? `${g.yaw.toFixed(0)}° / ${g.pitch.toFixed(0)}°` : "–"}</span>
-              <span>Gaze yaw / pitch (+ = your right / up)</span>
-              <span>{g?.face ? `${g.gYaw.toFixed(0)}° / ${g.gPitch.toFixed(0)}°` : "–"}</span>
-            </div>
-            <label className="check small" style={{ marginTop: 10 }}>
-              <input
-                type="checkbox"
-                checked={settings.flipYaw}
-                onChange={(e) => {
-                  setSettings({ flipYaw: e.target.checked });
-                  tracker.flipYaw = e.target.checked;
-                }}
-              />
-              Flip left/right (use if turning to your right shows a negative yaw)
-            </label>
-          </details>
           <div className="card">
             <h3 style={{ marginBottom: 10 }}>Checklist</h3>
             <ul className="checklist">
@@ -118,8 +93,10 @@ export default function Setup() {
           </div>
         </div>
 
-        <div className="grid scroll" style={{ alignContent: "start" }}>
+        <div className="setup-col">
+          {drill ? <DrillCard /> : <PromptPicker />}
           <div className="card grid">
+            <div className="toggle-grid">
             <Toggle
               label="Mode"
               value={settings.difficulty}
@@ -144,8 +121,10 @@ export default function Setup() {
               options={[["yes", "Using notes or slides"], ["no", "No notes"]]}
               onChange={(v) => { if ((v === "yes") !== settings.notes) set({ calibrated: false }); setSettings({ notes: v === "yes" }); }}
             />
-            {!drill && <div className="row">
-              <div className="field" style={{ flex: 1 }}>
+            </div>
+            <div className="toggle-grid">
+            {!drill && (
+              <div className="field">
                 <label>Target length (minutes)</label>
                 <input
                   type="number"
@@ -155,8 +134,8 @@ export default function Setup() {
                   onChange={(e) => setSettings({ targetMinutes: e.target.value ? Number(e.target.value) : null })}
                 />
               </div>
-            </div>}
-            <div className="field">
+            )}
+            <div className="field" style={drill ? { gridColumn: "1 / -1" } : undefined}>
               <label>Microphone</label>
               <select
                 value={deviceId ?? ""}
@@ -185,18 +164,43 @@ export default function Setup() {
                 </span>
               )}
             </div>
+            </div>
             <label className="check">
               <input type="checkbox" checked={settings.recordVideo} onChange={(e) => setSettings({ recordVideo: e.target.checked })} />
               Save a video of this run for playback (stays on this computer)
             </label>
           </div>
 
+          <details className="card readout">
+            <summary className="row" style={{ justifyContent: "space-between" }}>
+              <span className="micro">Gaze readout</span>
+              <span className="muted small mono">
+                {tracker.fps.toFixed(0)} fps · {tracker.inferMs.toFixed(1)} ms/frame
+              </span>
+            </summary>
+            <div className="kv mono" style={{ marginTop: 10 }}>
+              <span>Head yaw / pitch</span>
+              <span>{g?.face ? `${g.yaw.toFixed(0)}° / ${g.pitch.toFixed(0)}°` : "–"}</span>
+              <span>Gaze yaw / pitch (+ = your right / up)</span>
+              <span>{g?.face ? `${g.gYaw.toFixed(0)}° / ${g.gPitch.toFixed(0)}°` : "–"}</span>
+            </div>
+            <label className="check small" style={{ marginTop: 10 }}>
+              <input
+                type="checkbox"
+                checked={settings.flipYaw}
+                onChange={(e) => {
+                  setSettings({ flipYaw: e.target.checked });
+                  tracker.flipYaw = e.target.checked;
+                }}
+              />
+              Flip left/right (use if turning to your right shows a negative yaw)
+            </label>
+          </details>
           <div className="row">
             <button className={`btn big ${calibrated ? "" : "primary"}`} onClick={() => go("calibrate")} disabled={!faceOk}>
               <Icon name="crosshair" size={14} />
               {calibrated ? "Recalibrate" : camera ? "Calibrate gaze (6 s)" : "Calibrate gaze (12 s)"}
             </button>
-            <span className="spacer" />
             <button className={`btn big ${calibrated ? "primary" : ""}`} onClick={begin} disabled={starting || !calibrated}
               title={calibrated ? undefined : "Calibrate your gaze first so eye contact is measured for your setup"}>
               {starting ? "Starting…" : calibrated ? "Start speaking" : "Calibrate to start"} <Icon name="arrowR" size={14} className="arw" />
@@ -204,8 +208,44 @@ export default function Setup() {
           </div>
         </div>
       </div>
+     </div>
     </div>
   );
+}
+
+/** Zoom the setup screen out just enough that every setting fits the window without scrolling.
+ *  An auto-width box under CSS zoom still fills its parent, so the layout keeps its proportions as it scales.
+ *  Below MIN_ZOOM text gets too small to read, so it stops shrinking and the page scrolls instead. */
+const MIN_ZOOM = 0.6;
+function useFitToHeight() {
+  const outer = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [tooSmall, setTooSmall] = useState(false);
+  const zoomRef = useRef(1);
+  useLayoutEffect(() => {
+    const o = outer.current, i = inner.current;
+    if (!o || !i) return;
+    const fit = () => {
+      const pad = parseFloat(getComputedStyle(o).paddingBottom) || 0;
+      const avail = o.clientHeight - pad;
+      const natural = i.getBoundingClientRect().height / zoomRef.current;
+      if (!avail || !natural) return;
+      const want = Math.min(1, avail / natural);
+      const z = Math.max(MIN_ZOOM, Math.floor(want * 100) / 100);
+      if (Math.abs(z - zoomRef.current) >= 0.01) {
+        zoomRef.current = z;
+        setZoom(z);
+      }
+      setTooSmall(want < MIN_ZOOM);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(o);
+    ro.observe(i);
+    return () => ro.disconnect();
+  }, []);
+  return { outer, inner, zoom, tooSmall };
 }
 
 function Toggle({ label, value, options, onChange }: {

@@ -21,6 +21,12 @@ export default function Debrief() {
   const [now, setNow] = useState(0);
   const mediaRef = useRef<HTMLVideoElement & HTMLAudioElement>(null);
   const voiceRef = useRef<HTMLAudioElement>(null);
+  const tabBodyRef = useRef<HTMLDivElement>(null);
+  // Switch tabs from the bar pinned at the bottom, then bring that tab's content into view.
+  const pickTab = (k: Tab) => {
+    setTab(k);
+    requestAnimationFrame(() => tabBodyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
   const [voiceUrl, setVoiceUrl] = useState<string | null>(null);
   const [speaking, setSpeaking] = useState(false);
 
@@ -144,15 +150,7 @@ export default function Debrief() {
       {voiceUrl && <audio ref={voiceRef} src={voiceUrl} onEnded={() => setSpeaking(false)} />}
 
 
-      <div className="tabs" role="tablist">
-        {tabs.map(([k, label]) => (
-          <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid" style={{ alignContent: "start" }}>
+      <div className="grid tab-body" ref={tabBodyRef} role="tabpanel" style={{ alignContent: "start" }}>
         {tab === "overview" && (
           <>
             {s.overview && <ArgumentCard o={s.overview} onSeek={seek} />}
@@ -177,6 +175,13 @@ export default function Debrief() {
       <DetailedStats s={s} />
       </div>
       </div>
+      <nav className="tabbar" role="tablist" aria-label="Debrief sections">
+        {tabs.map(([k, label]) => (
+          <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "active" : ""} onClick={() => pickTab(k)}>
+            {label}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

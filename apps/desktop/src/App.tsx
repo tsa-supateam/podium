@@ -13,7 +13,7 @@ import QA from "./features/qa/QA";
 import Learn from "./features/learn/Learn";
 import { stopSession } from "./features/live/session";
 import type { Screen } from "./stores/app";
-import { BootSplash, LogoLockup } from "./ui/logo";
+import { BootSplash } from "./ui/logo";
 import { Icon } from "./ui/icons";
 import { ZonePatterns } from "./ui/kit";
 import { installCardLight } from "./ui/motion";
@@ -236,7 +236,7 @@ function TopBar() {
   return (
     <header className="topbar">
       <button className="brand" onClick={() => !inSession && go("home")} disabled={inSession} aria-label="Podium home">
-        <LogoLockup size={26} />
+        <span className="brand-mark" aria-hidden>◐</span> Podium
       </button>
       <nav className="nav" ref={navRef}>
         {NAV.map(([s, label]) => (
