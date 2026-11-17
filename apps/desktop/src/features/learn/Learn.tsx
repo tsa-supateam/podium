@@ -1,7 +1,6 @@
 // Learn: modules -> skills -> lesson + practice, like a course. Modules are the things the analysis
 // scores, so practicing a skill here moves the same number on your results.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { wheelWarp } from "../../lib/nav";
 import { openSession } from "../../App";
 import { engine } from "../../lib/engine";
 import type { SessionRow } from "../../lib/types";
@@ -110,9 +109,6 @@ export function Ring({ value, size = 120, stroke = 8, children, tone = "signal" 
 
 // ---------------------------------------------------------------- course overview
 function Course({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
-  // scrolling up past the top of the skill tree warps back to Home
-  const gridRef = useRef<HTMLDivElement>(null);
-  const onWheel = useMemo(() => wheelWarp("home", -1, () => (gridRef.current?.scrollTop ?? 0) <= 0), []);
   const [last, setLast] = useState<SessionRow | null>(null);
   useEffect(() => {
     engine.request<SessionRow[]>("sessions.list", { limit: 20 })
@@ -132,7 +128,7 @@ function Course({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
   const passed = Object.values(st?.checks ?? {}).filter((c) => c.attempts.some((a) => a.passed)).length;
 
   return (
-    <div className="page learn stagger" onWheel={onWheel}>
+    <div className="page learn stagger">
       <ScreenHeader title="Learn" meta={demo ? ["Judge demo mode: sample progress"] : undefined} />
       <section className="learn-hud">
         <div className="hud-ring">
@@ -181,7 +177,7 @@ function Course({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
         </button>
       )}
 
-      <div className="skill-tree-wrap scroll" ref={gridRef}>
+      <div className="skill-tree-wrap scroll">
         <SkillTree st={st} demo={demo} />
       </div>
     </div>

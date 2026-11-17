@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { wheelWarp } from "../../lib/nav";
+import { useEffect, useState } from "react";
 import { engine } from "../../lib/engine";
 import type { SessionRow } from "../../lib/types";
 import { useApp } from "../../stores/app";
@@ -17,11 +16,10 @@ export default function Home() {
   const scored = all.filter((r) => r.overall != null);
   const best = scored.length ? Math.max(...scored.map((r) => r.overall!)) : 0;
   const minutes = Math.round(all.reduce((a, r) => a + r.durationSec, 0) / 60);
-  const onWheel = useMemo(() => wheelWarp("learn", 1), []);
   const avg = scored.length ? Math.round(scored.reduce((a, r) => a + r.overall!, 0) / scored.length) : 0;
 
   return (
-    <div className="page home stagger" onWheel={onWheel}>
+    <div className="page home stagger">
       <section className="home-top">
         <div className="home-copy">
           <h1 className="display">
@@ -69,7 +67,6 @@ export default function Home() {
           </div>
         ))}
       </section>
-      <div className="scroll-hint micro" aria-hidden>Scroll to learn <span>↓</span></div>
     </div>
   );
 }

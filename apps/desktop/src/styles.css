@@ -869,17 +869,7 @@ input[type="checkbox"]:checked::after { content: ""; width: 6px; height: 3px; bo
 .scope { padding: 0; }
 .wipe { animation: type 1.4s var(--ease-out-expo) both; }
 
-/* Navigation: particle warp, swipe-back arrow, scroll hint, average report */
-.warp { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 90; pointer-events: none; }
-.swipe-back { position: fixed; left: 0; top: 50%; z-index: 95; pointer-events: none;
-  transform: translate(calc(-48px + var(--p) * 72px), -50%); opacity: calc(0.3 + var(--p) * 0.7); }
-.swipe-back span { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%;
-  background: var(--charcoal-700); border: 1px solid var(--signal); color: var(--signal); font-size: 20px;
-  box-shadow: 0 0 calc(var(--p) * 24px) var(--signal); }
-.scroll-hint { display: flex; justify-content: center; gap: 8px; color: var(--concrete-dim); padding-bottom: 4px; }
-.scroll-hint span { animation: hint-bob 1.6s ease-in-out infinite; }
-@keyframes hint-bob { 50% { transform: translateY(4px); } }
-@media (prefers-reduced-motion: reduce) { .scroll-hint span { animation: none; } }
+/* Average report */
 .trend-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .avg-btn { align-self: flex-end; }
 .avg-kind { width: 330px; }

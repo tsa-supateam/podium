@@ -6,13 +6,6 @@ import type { EngagementTick, FillerEventMsg, GazeSample, PaceTick, Question, Se
 
 export type Screen = "home" | "setup" | "calibrate" | "live" | "qa" | "analyzing" | "debrief" | "history" | "learn" | "average";
 
-export interface NavEntry {
-  screen: Screen;
-  learnPath: { module: string | null; skill: string | null };
-}
-/** Screens you browse between; swiping back moves through these like a web browser. */
-export const BROWSE_SCREENS: Screen[] = ["home", "learn", "history", "average", "debrief"];
-
 /** A Learn practice in progress: a short run checked against one skill. */
 export interface Drill {
   skill: string;
@@ -70,10 +63,6 @@ interface AppState {
   mainAnalysis: { stage: string; pct: number; done: boolean } | null;
   drill: Drill | null;
   learnPath: { module: string | null; skill: string | null };
-  /** Back history for the browsing screens (Home, Learn and its pages, History, Average, results). */
-  backStack: NavEntry[];
-  /** Bumped to play the particle warp between screens; the shutter stays out of the way. */
-  warp: number;
   toast: string | null;
   set: (p: Partial<AppState>) => void;
   setSettings: (p: Partial<Settings>) => void;
@@ -121,8 +110,6 @@ export const useApp = create<AppState>((set, get) => ({
   mainAnalysis: null,
   drill: null,
   learnPath: { module: null, skill: null },
-  backStack: [],
-  warp: 0,
   toast: null,
   set: (p) => set(p),
   setSettings: (p) => {

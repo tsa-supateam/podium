@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { engine } from "./lib/engine";
 import type { EngagementTick, FillerEventMsg, GazeSample, PaceTick, SessionBundle } from "./lib/types";
 import { live, useApp } from "./stores/app";
@@ -10,8 +10,6 @@ import Live from "./features/live/Live";
 import Analyzing from "./features/live/Analyzing";
 import Debrief from "./features/debrief/Debrief";
 import QA from "./features/qa/QA";
-import { installNavHistory, installSwipeBack, lastWarpAt } from "./lib/nav";
-import Warp from "./ui/Warp";
 import Average from "./features/history/Average";
 import Learn from "./features/learn/Learn";
 import { stopSession } from "./features/live/session";
@@ -147,15 +145,6 @@ export default function App() {
   }, [toast, set]);
 
   useEffect(() => installCardLight(), []);
-  useEffect(() => installNavHistory(), []);
-  const [swipe, setSwipe] = useState(0);
-  useEffect(() => installSwipeBack(setSwipe), []);
-  const warp = useApp((s) => s.warp);
-  const [warping, setWarping] = useState(0);
-  useEffect(() => {
-    if (warp) setWarping(warp);
-  }, [warp]);
-  const endWarp = useCallback(() => setWarping(0), []);
   const [gallery, setGallery] = useState(() => import.meta.env.DEV && location.hash === "#gallery");
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -193,12 +182,6 @@ export default function App() {
         )}
       </main>
       <Shutter screen={screen} />
-      {warping > 0 && <Warp key={warping} onDone={endWarp} />}
-      {swipe > 0 && (
-        <div className="swipe-back" style={{ ["--p" as string]: swipe }} aria-hidden>
-          <span>←</span>
-        </div>
-      )}
       {toast && <div className="toast" role="status"><span className="micro">SYS.MSG</span>{toast}</div>}
       <div className="grain" aria-hidden />
       <BootSplash />
@@ -215,7 +198,6 @@ function Shutter({ screen }: { screen: Screen }) {
       first.current = false;
       return;
     }
-    if (performance.now() - lastWarpAt() < 1200) return; // the particle warp covers this change
     setN((x) => x + 1);
   }, [screen]);
   if (!n) return null;
