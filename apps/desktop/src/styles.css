@@ -927,7 +927,7 @@ input[type="checkbox"]:checked::after { content: ""; width: 6px; height: 3px; bo
 
 /* Skill tree */
 .skill-tree-wrap { flex: 1; min-height: 0; }
-.skill-tree { position: relative; height: max(380px, 100%); min-height: 380px; border: 1px solid var(--glass);
+.skill-tree { position: relative; height: 100%; min-height: 300px; border: 1px solid var(--glass);
   background: radial-gradient(circle at 50% 40%, rgba(255, 77, 45, 0.06), transparent 60%),
     linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px) 0 0 / 28px 28px,
     linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px) 0 0 / 28px 28px; }
@@ -1009,3 +1009,15 @@ input[type="checkbox"]:checked::after { content: ""; width: 6px; height: 3px; bo
 .learn .learn-rec .muted { color: var(--concrete); }
 .learn .learn-rec .learn-rec-kicker { color: var(--learn-accent); }
 .learn .learn-hud { padding: 14px 22px; }
+
+/* Recommended module: a round button in the Learn header (the tree gets the room) */
+.rec-orb { display: flex; align-items: center; gap: 12px; background: none; border: 0; padding: 0; color: var(--paper); text-align: right; }
+.rec-orb-text { display: flex; flex-direction: column; gap: 2px; }
+.rec-orb-text .micro { color: var(--learn-accent, #ff4d2d); }
+.rec-orb-text b { font-family: var(--display); font-size: 14px; text-transform: uppercase; }
+.rec-orb-circle { position: relative; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%;
+  background: #ff4d2d; color: #0f0f0f; box-shadow: 0 0 0 4px rgba(255, 77, 45, 0.18), 0 0 22px -4px #ff4d2d; transition: transform 180ms, box-shadow 180ms; }
+.rec-orb-circle::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 1px solid #ff4d2d; animation: orb-ping 2.2s ease-out infinite; }
+.rec-orb:hover .rec-orb-circle { transform: scale(1.08); box-shadow: 0 0 0 6px rgba(255, 77, 45, 0.25), 0 0 30px -2px #ff4d2d; }
+@keyframes orb-ping { from { opacity: 0.8; transform: scale(1); } to { opacity: 0; transform: scale(1.45); } }
+@media (prefers-reduced-motion: reduce) { .rec-orb-circle::after { animation: none; } }

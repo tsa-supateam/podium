@@ -129,7 +129,18 @@ function Course({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
 
   return (
     <div className="page learn stagger">
-      <ScreenHeader title="Learn" meta={demo ? ["Judge demo mode: sample progress"] : undefined} />
+      <ScreenHeader title="Learn" meta={demo ? ["Judge demo mode: sample progress"] : undefined}>
+        {rec && (
+          <button className="rec-orb" onClick={(e) => nav(rec.id, null, e)} title={`Recommended from your last run: ${rec.title}. ${rec.improves}`}
+            aria-label={`Start recommended module: ${rec.title}`}>
+            <span className="rec-orb-text">
+              <span className="micro">Recommended</span>
+              <b>{rec.title}</b>
+            </span>
+            <span className="rec-orb-circle"><Icon name={MODULE_ICON[rec.id] ?? "target"} size={20} /></span>
+          </button>
+        )}
+      </ScreenHeader>
       <section className="learn-hud">
         <div className="hud-ring">
           <Ring value={total / 100} size={132} stroke={9}>
@@ -163,19 +174,6 @@ function Course({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
           </span>
         </div>
       </section>
-
-      {rec && (
-        <button className="learn-rec" onClick={(e) => nav(rec.id, null, e)}>
-          <ModuleIcon mod={rec} />
-          <span>
-            <span className="learn-rec-kicker">Recommended from your last run</span>
-            <b>{rec.title}</b>
-            <span className="muted small">{rec.improves}</span>
-          </span>
-          <span className="spacer" />
-          <span className="hero-cta-title" style={{ padding: 0, fontSize: 22 }}>Start <Icon name="arrowR" size={22} /></span>
-        </button>
-      )}
 
       <div className="skill-tree-wrap scroll">
         <SkillTree st={st} demo={demo} />
