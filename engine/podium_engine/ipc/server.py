@@ -140,6 +140,11 @@ class Server:
             await self.start_session(ev, d)
         elif t == "session.stop":
             await self.stop_session(ev)
+        elif t == "sessions.average":
+            from .. import average
+
+            st = d.get("speechType") if d.get("speechType") in ("prepared", "impromptu") else None
+            await self.reply(ev, "average", average.average(st))
         elif t == "learn.status":
             from .. import learn
 

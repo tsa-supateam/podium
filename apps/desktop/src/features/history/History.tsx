@@ -108,7 +108,12 @@ export default function History() {
             <StatTile value={Math.round(scored.reduce((a, r) => a + r.overall!, 0) / scored.length)} label="Average" />
             <StatTile value={scored.length} label="Scored runs" tone="paper" />
           </div>
-          <Trend values={scored.map((r) => r.overall as number)} />
+          <div className="trend-col">
+            <Trend values={scored.map((r) => r.overall as number)} />
+            <button className="btn ghost avg-btn" onClick={() => useApp.getState().go("average")}>
+              <Icon name="gauge" size={14} /> Average performance <Icon name="arrowR" size={12} className="arw" />
+            </button>
+          </div>
           </div>
         </div>
       )}

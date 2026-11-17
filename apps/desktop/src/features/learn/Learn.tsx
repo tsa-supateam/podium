@@ -1,6 +1,7 @@
 // Learn: modules -> skills -> lesson + practice, like a course. Modules are the things the analysis
 // scores, so practicing a skill here moves the same number on your results.
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { wheelWarp } from "../../lib/nav";
 import { openSession } from "../../App";
 import { engine } from "../../lib/engine";
 import type { SessionRow } from "../../lib/types";
@@ -60,6 +61,9 @@ function ModuleIcon({ mod, size = 44 }: { mod: Module; size?: number }) {
 
 // ---------------------------------------------------------------- course overview
 function Course({ st }: { st: LearnStatus | null }) {
+  // scrolling up past the top of the module list warps back to Home
+  const gridRef = useRef<HTMLDivElement>(null);
+  const onWheel = useMemo(() => wheelWarp("home", -1, () => (gridRef.current?.scrollTop ?? 0) <= 0), []);
   const [last, setLast] = useState<SessionRow | null>(null);
   useEffect(() => {
     engine.request<SessionRow[]>("sessions.list", { limit: 20 })
@@ -74,7 +78,7 @@ function Course({ st }: { st: LearnStatus | null }) {
   const total = Math.round(MODULES.reduce((a, m) => a + moduleProgress(m, st), 0) / MODULES.length);
 
   return (
-    <div className="page learn stagger">
+    <div className="page learn stagger" onWheel={onWheel}>
       <ScreenHeader title="Learn" />
       <div className="tiles">
         <StatTile value={`${total}%`} label="Course mastery" tone="signal" sub={<SegMeter value={total / 100} />} />
@@ -96,7 +100,7 @@ function Course({ st }: { st: LearnStatus | null }) {
         </button>
       )}
 
-      <div className="module-grid scroll">
+      <div className="module-grid scroll" ref={gridRef}>
         {MODULES.map((m) => {
           const pct = moduleProgress(m, st);
           return (
