@@ -11,6 +11,7 @@ import {
 import { TREE, XP, demoStatus, level, lockReason, streak, testClaim, unlocked, xpOf } from "./game";
 import { Icon, MODULE_ICON } from "../../ui/icons";
 import { ScreenHeader, Stepper } from "../../ui/kit";
+import { LessonFlow, latestRun } from "./LessonFlow";
 
 function useLearnStatus(): [LearnStatus | null, (s: LearnStatus) => void, boolean] {
   const demo = useApp((s) => !!s.settings.demoMode);
@@ -238,72 +239,143 @@ function SkillTree({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
 }
 
 // ---------------------------------------------------------------- module page
+/** Where a skill stands: lesson read, practice passed, mastered in full runs. */
+function skillState(s: Skill, st: LearnStatus | null) {
+  const c = st?.checks[s.check];
+  const lesson = !!st?.lessons.includes(s.id);
+  const passed = !!c?.attempts.some((a) => a.passed);
+  const m = mastery(s, st);
+  const last = c?.recent.length ? c.recent[c.recent.length - 1] : null;
+  const xpLeft = (lesson ? 0 : XP.lesson) + (passed ? 0 : XP.pass) + (m >= 3 ? 0 : XP.mastered);
+  return { c, lesson, passed, m, last, xpLeft };
+}
+
+/** Three dots: lesson, practice, mastered. */
+function SkillPips({ s, st }: { s: Skill; st: LearnStatus | null }) {
+  const k = skillState(s, st);
+  const pips: [boolean, string][] = [[k.lesson, "Lesson read"], [k.passed, "Practice passed"], [k.m >= 3, "Mastered in your talks"]];
+  return (
+    <span className="pips" aria-label={pips.map(([on, t]) => `${t}: ${on ? "yes" : "no"}`).join(", ")}>
+      {pips.map(([on, t]) => <i key={t} className={on ? "on" : ""} title={t} />)}
+    </span>
+  );
+}
+
+/** What your last full talk showed for this skill. */
+function LastTalk({ s, st }: { s: Skill; st: LearnStatus | null }) {
+  const { last } = skillState(s, st);
+  if (!last) return <span className="last-talk none">No full talk yet</span>;
+  const v = last.value == null ? "not found" : s.practice.unit ? s.practice.unit(last.value) : String(last.value);
+  return (
+    <span className={`last-talk ${last.passed ? "ok" : "no"}`} title="From your most recent full talk">
+      <Icon name={last.passed ? "check" : "cross"} size={11} /> Last talk: {v}
+    </span>
+  );
+}
+
 function ModulePage({ mod, st, demo }: { mod: Module; st: LearnStatus | null; demo: boolean }) {
   const open = unlocked(mod, st, demo);
+  const states = mod.skills.map((s) => skillState(s, st));
+  // Up next: the first skill whose practice isn't passed yet, else the first not yet mastered.
+  let cur = states.findIndex((k) => !k.passed);
+  if (cur < 0) cur = states.findIndex((k) => k.m < 3);
+  const done = states.filter((k) => k.passed).length;
+  const xpLeft = states.reduce((a, k) => a + k.xpLeft, 0);
+  const [score, setScore] = useState<number | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    latestRun().then((b) => {
+      const v = b?.summary?.scores?.[mod.scoreKeys[0] as keyof typeof b.summary.scores];
+      if (alive) setScore(typeof v === "number" ? Math.round(v) : null);
+    }).catch(() => alive && setScore(null));
+    return () => { alive = false; };
+  }, [mod.scoreKeys]);
+  const pct = moduleProgress(mod, st);
+
   return (
-    <div className="page learn stagger">
+    <div className="page learn module-page stagger">
       <ScreenHeader title={mod.title}>
         <button className="btn ghost" onClick={() => nav(null)}><Icon name="arrowL" size={14} /> All modules</button>
       </ScreenHeader>
       {!open && (
         <div className="lock-banner"><Icon name="lock" size={14} /> {lockReason(mod)}. You can read the lessons now; practices open once it's unlocked.</div>
       )}
-      <div className="module-head">
+      <div className="module-head mod-hero">
         <ModuleIcon mod={mod} size={64} />
-        <div>
-          <p className="muted">{mod.blurb}</p>
-          <span className="module-improves small">Improves: {mod.improves}</span>
+        <div className="mod-hero-copy">
+          <p>{mod.blurb}</p>
+          <div className="mod-stats">
+            <span><b>{done}</b> of {mod.skills.length} skills passed</span>
+            {xpLeft > 0 ? <span><b>+{xpLeft}</b> XP to earn</span> : <span><b>All</b> XP earned</span>}
+            {score != null && <span>Your {mod.title} score <b>{score}</b>{score < 70 ? <> · aim for 70+</> : <> · strong</>}</span>}
+          </div>
         </div>
         <div className="learn-total">
-          <Ring value={moduleProgress(mod, st) / 100} size={84} stroke={6}>
-            <b className="ring-value small">{moduleProgress(mod, st)}<small>%</small></b>
+          <Ring value={pct / 100} size={84} stroke={6}>
+            <b className="ring-value small">{pct}<small>%</small></b>
           </Ring>
-          <MasterySquares mod={mod} st={st} />
+          <span className="micro">mastery</span>
         </div>
       </div>
 
-      <div className="skill-list scroll">
+      <ol className="skill-path scroll">
         {mod.skills.map((s, i) => {
-          const m = mastery(s, st);
-          const c = st?.checks[s.check];
-          const lessonDone = !!st?.lessons.includes(s.id);
-          const passed = !!c?.attempts.some((a) => a.passed);
+          const k = states[i];
+          const isCur = i === cur;
+          const steps = s.lesson.example ? 4 : 3;
+          const node = k.m >= 3 ? "mastered" : k.passed ? "passed" : isCur ? "current" : "todo";
+          const go = (e: React.MouseEvent) => nav(mod.id, s.id, e);
           return (
-            <section key={s.id} className="card skill-card">
-              <div className="skill-head">
-                <span className="skill-num">{String(i + 1).padStart(2, "0")}</span>
-                <b className="skill-title">{s.title}</b>
-                <MasteryChip m={m} />
-              </div>
-              <button className="skill-item" onClick={(e) => nav(mod.id, s.id, e)}>
-                <span className={`item-dot ${lessonDone ? "done" : ""}`}><Icon name={lessonDone ? "check" : "book"} size={14} /></span>
-                <span>Lesson: {s.title}</span>
-                <span className="spacer" />
-                <span className="muted small">{lessonDone ? "Read" : "2 min read"}</span>
-              </button>
-              <button className="skill-item" onClick={(e) => nav(mod.id, s.id, e)}>
-                <span className={`item-dot ${passed ? "done" : ""}`}><Icon name={passed ? "check" : "mic"} size={14} /></span>
-                <span>Practice: {s.practice.target}</span>
-                <span className="spacer" />
-                <span className="muted small">{passed ? "Passed" : c?.attempts.length ? `${c.attempts.length} tr${c.attempts.length === 1 ? "y" : "ies"}` : `${s.practice.seconds} s`}</span>
-              </button>
-            </section>
+            <li key={s.id} className={`path-step ${node} ${i > 0 && states[i - 1].passed ? "prev-done" : ""}`} style={{ animationDelay: `${80 + i * 70}ms` }}>
+              <span className="path-node" aria-hidden>
+                {k.passed ? <Icon name="check" size={14} /> : String(i + 1)}
+              </span>
+              {isCur ? (
+                <section className="up-next" onClick={go} role="button" tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === "Enter") nav(mod.id, s.id); }}>
+                  <div className="up-next-top">
+                    <span className="up-next-kicker">Up next · Skill {String(i + 1).padStart(2, "0")}</span>
+                    <SkillPips s={s} st={st} />
+                  </div>
+                  <b className="up-next-title">{s.title}</b>
+                  {s.lesson.example && <p className="up-next-quote">“{s.lesson.example.strong}”</p>}
+                  <div className="up-next-foot">
+                    <LastTalk s={s} st={st} />
+                    <span className="up-next-meta">{steps} steps · ~2 min, then a {s.practice.seconds} s talk</span>
+                    <span className="spacer" />
+                    <button className="btn primary" onClick={(e) => { e.stopPropagation(); nav(mod.id, s.id, e); }}>
+                      {!k.lesson ? <><Icon name="book" size={14} /> Start lesson</> : open ? <><Icon name="mic" size={14} /> Practice</> : <><Icon name="book" size={14} /> Review lesson</>}
+                      <Icon name="arrowR" size={14} className="arw" />
+                    </button>
+                  </div>
+                </section>
+              ) : (
+                <button className="path-row" onClick={go}>
+                  <span className="path-row-main">
+                    <b>{s.title}</b>
+                    <span className="path-row-sub">{s.practice.target}</span>
+                  </span>
+                  <LastTalk s={s} st={st} />
+                  <SkillPips s={s} st={st} />
+                  <span className="path-go">{k.passed ? "Review" : "Start"} <Icon name="arrowR" size={12} /></span>
+                </button>
+              )}
+            </li>
           );
         })}
-      </div>
+      </ol>
     </div>
   );
 }
 
 // ---------------------------------------------------------------- skill page
 function SkillPage({ mod, skill, st, setSt, demo }: { mod: Module; skill: Skill; st: LearnStatus | null; setSt: (s: LearnStatus) => void; demo: boolean }) {
-  const { set, go, settings } = useApp();
+  const { set, go } = useApp();
   const open = unlocked(mod, st, demo);
   const m = mastery(skill, st);
   const c = st?.checks[skill.check];
   const lessonDone = !!st?.lessons.includes(skill.id);
-  const L = skill.lesson, P = skill.practice;
-  const recentPass = (c?.recent ?? []).filter((r) => r.passed).length;
+  const P = skill.practice;
   const idx = mod.skills.findIndex((s) => s.id === skill.id);
   const next = mod.skills[idx + 1];
   const fmt = (v: number | null) => (v == null ? "–" : P.unit ? P.unit(v) : String(v));
@@ -337,134 +409,39 @@ function SkillPage({ mod, skill, st, setSt, demo }: { mod: Module; skill: Skill;
       </div>
 
       <div className="skill-layout">
-        <article className="card lesson">
-          <h3>Lesson</h3>
-          <p className="lesson-intro">{L.intro}</p>
-          {L.points.map((p) => (
-            <div key={p.title} className="lesson-point">
-              <b>{p.title}</b>
-              <p>{p.body}</p>
-            </div>
-          ))}
-          {L.example && (
-            <div className="lesson-example">
-              <div className="ex weak">
-                <div className="ex-head"><span className="tag bad">Weak</span><ListenButton text={L.example.weak} style="weak" /></div>
-                <p>“{L.example.weak}”</p>
-              </div>
-              <div className="ex strong">
-                <div className="ex-head"><span className="tag good">Strong</span><ListenButton text={L.example.strong} style="strong" /></div>
-                <p>“{L.example.strong}”</p>
-              </div>
-              <p className="muted small">{L.example.why}</p>
-            </div>
-          )}
-          <p className="lesson-remember"><Icon name="idea" size={16} /> {L.remember}</p>
-          <div className="row">
-            {lessonDone ? (
-              <button className="btn ghost" onClick={() => void markRead(false)}><Icon name="check" size={14} /> Lesson complete (undo)</button>
-            ) : (
-              <button className="btn" onClick={() => void markRead(true)}>Mark lesson complete</button>
-            )}
-          </div>
-        </article>
+        <LessonFlow key={skill.id} skill={skill} check={c} done={lessonDone} canPractice={open}
+          onComplete={() => void markRead(true)} onPractice={practice}
+          onNextSkill={next ? () => nav(mod.id, next.id) : undefined} />
 
         <aside className="grid" style={{ alignContent: "start" }}>
-          <section className="card practice-card">
-            <h3>Practice</h3>
-            <p>{P.instruction}</p>
-            <div className="practice-prompt">
-              <span className="micro">Your prompt / {P.seconds} s</span>
-              <b>{P.prompt}</b>
+          <section className={`card practice-card ${lessonDone ? "" : "waiting"}`}>
+            <div className="practice-top">
+              <h3>Practice</h3>
+              <span className="practice-time"><Icon name="mic" size={12} /> {P.seconds} s talk</span>
             </div>
-            <p className="small"><span className="muted">To pass:</span> {P.target}</p>
-            <ClaimTester prompt={P.prompt} />
+            <p className="practice-q">{P.prompt}</p>
+            <p className="practice-goal"><Icon name="target" size={14} /> {P.target}</p>
             {open ? (
-              <button className="btn primary big" onClick={practice}><Icon name="mic" size={14} /> Start practice <Icon name="arrowR" size={14} className="arw" /></button>
+              <button className="btn primary big" onClick={practice}>Start practice <Icon name="arrowR" size={14} className="arw" /></button>
             ) : (
               <div className="lock-banner"><Icon name="lock" size={14} /> {lockReason(mod)}</div>
             )}
-            {settings.difficulty === "judge" && <p className="muted small">Runs in Assessment mode, like your setting.</p>}
-          </section>
-
-          <section className="card">
-            <h3>Your progress</h3>
-            <ol className="mastery-steps">
-              <li className={m >= 1 ? "done" : ""}><b>Familiar</b> <span className="muted small">read the lesson or try a practice</span></li>
-              <li className={m >= 2 ? "done" : ""}><b>Proficient</b> <span className="muted small">pass the practice</span></li>
-              <li className={m >= 3 ? "done" : ""}>
-                <b>Mastered</b> <span className="muted small">also pass it in 2 of your last 3 full runs (now {recentPass} of {c?.recent.length ?? 0})</span>
-              </li>
-            </ol>
+            {skill.check === "claim_up_front" && <ClaimTester prompt={P.prompt} />}
             {c && c.attempts.length > 0 && (
-              <>
-                <h4 className="muted small" style={{ margin: "12px 0 6px" }}>Practice attempts</h4>
-                <ul className="attempts">
-                  {[...c.attempts].reverse().map((a) => (
-                    <li key={a.sessionId}>
-                      <button className="link-btn" onClick={() => void openSession(a.sessionId)}>
-                        <span className={`tag ${a.passed ? "good" : "bad"}`}>{a.passed ? <><Icon name="check" size={10} /> Passed</> : "Not yet"}</span>
-                        <span>{fmt(a.value)}</span>
-                        <span className="muted small">{a.at ? new Date(a.at).toLocaleDateString() : ""}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
+              <div className="practice-tries">
+                <span className="micro">Your tries</span>
+                {c.attempts.slice(-6).map((a) => (
+                  <button key={a.sessionId} className={`try ${a.passed ? "ok" : "no"}`} onClick={() => void openSession(a.sessionId)}
+                    title={`${a.passed ? "Passed" : "Not yet"}: ${fmt(a.value)}${a.at ? ` · ${new Date(a.at).toLocaleDateString()}` : ""}`}>
+                    <Icon name={a.passed ? "check" : "cross"} size={11} />
+                  </button>
+                ))}
+              </div>
             )}
           </section>
         </aside>
       </div>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------- listen (local TTS)
-const voices = new Map<string, Promise<string>>();
-function exampleVoice(text: string, style: "weak" | "strong"): Promise<string> {
-  const k = `${style}|${text}`;
-  if (!voices.has(k)) {
-    const p = engine.request<ArrayBuffer>("tts.speak", { text, style }, 60000)
-      .then((buf) => URL.createObjectURL(new Blob([buf], { type: "audio/wav" })));
-    p.catch(() => voices.delete(k));
-    voices.set(k, p);
-  }
-  return voices.get(k)!;
-}
-let playing: HTMLAudioElement | null = null;
-
-/** Reads an example aloud with the on-device voice: slow and flat for Weak, brisk and lively for Strong. */
-function ListenButton({ text, style }: { text: string; style: "weak" | "strong" }) {
-  const [state, setState] = useState<"idle" | "loading" | "playing">("idle");
-  const audio = useRef<HTMLAudioElement | null>(null);
-  useEffect(() => () => audio.current?.pause(), []);
-  const toggle = async () => {
-    if (state === "playing") {
-      audio.current?.pause();
-      setState("idle");
-      return;
-    }
-    setState("loading");
-    try {
-      const url = await exampleVoice(text, style);
-      playing?.pause(); // one example at a time
-      const a = new Audio(url);
-      audio.current = playing = a;
-      a.onended = a.onpause = () => setState("idle");
-      await a.play();
-      setState("playing");
-    } catch {
-      setState("idle");
-      useApp.getState().set({ toast: "The on-device voice isn't available (run make setup to fetch it)." });
-    }
-  };
-  return (
-    <button className={`listen-btn ${state}`} onClick={() => void toggle()} aria-pressed={state === "playing"}
-      title={style === "weak" ? "Hear it said weakly" : "Hear it said with conviction"}>
-      <Icon name={state === "playing" ? "stop" : "speaker"} size={12} />
-      {state === "loading" ? "Synthesizing…" : state === "playing" ? "Stop" : "Listen"}
-      <span className="wave" aria-hidden>{Array.from({ length: 5 }, (_, i) => <i key={i} style={{ animationDelay: `${i * 90}ms` }} />)}</span>
-    </button>
   );
 }
 
@@ -475,7 +452,7 @@ function ClaimTester({ prompt }: { prompt: string }) {
   const { checks, verdict } = useMemo(() => testClaim(text, prompt), [text, prompt]);
   return (
     <details className="claim-tester">
-      <summary><Icon name="target" size={14} /> Test your claim first <span className="micro">optional</span></summary>
+      <summary><Icon name="idea" size={14} /> Draft your opening line first</summary>
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={400}
         placeholder="Type the one sentence you'll open with…" aria-label="Your drafted claim" />
       {text.trim() && (
