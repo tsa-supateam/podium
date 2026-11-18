@@ -1,11 +1,5 @@
-/* Podium — "industrial signal" system. Fonts are bundled (OFL); nothing is fetched from the network. */
+/* Podium — "industrial signal" system. Uses the system font; nothing is fetched from the network. */
 
-@font-face { font-family: "Chakra Petch"; src: url("./assets/fonts/chakra-petch-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: block; }
-@font-face { font-family: "Chakra Petch"; src: url("./assets/fonts/chakra-petch-latin-600-normal.woff2") format("woff2"); font-weight: 600; font-display: block; }
-@font-face { font-family: "Chakra Petch"; src: url("./assets/fonts/chakra-petch-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: block; }
-@font-face { font-family: "JetBrains Mono"; src: url("./assets/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: block; }
-@font-face { font-family: "JetBrains Mono"; src: url("./assets/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: block; }
-@font-face { font-family: "JetBrains Mono"; src: url("./assets/fonts/jetbrains-mono-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: block; }
 
 :root {
   /* palette (exact) */
@@ -75,9 +69,12 @@
   --page: 1180px;
 
   /* type */
-  --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
-  --font: var(--mono);
+  /* One readable system sans for everything; --display and --mono stay as aliases so existing rules follow it. */
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --display: var(--sans);
+  --mono: var(--sans);
+  --code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font: var(--sans);
   color-scheme: dark;
 }
 
@@ -86,14 +83,14 @@
 html, body, #root { height: 100%; margin: 0; }
 body {
   background: var(--charcoal-900); color: var(--paper);
-  font: 400 13px/1.6 var(--mono); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums;
+  font: 400 14px/1.55 var(--sans); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums;
 }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:disabled { cursor: default; opacity: 0.4; }
 :focus { outline: none; }
 :focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
 ::selection { background: var(--signal); color: var(--ink); }
-code { font-family: var(--mono); font-size: 12px; background: var(--charcoal-700); padding: 1px 5px; color: var(--concrete); }
+code { font-family: var(--code); font-size: 12px; background: var(--charcoal-700); padding: 1px 5px; color: var(--concrete); }
 h1, h2, h3, h4 { margin: 0; font-family: var(--display); text-transform: uppercase; letter-spacing: -0.01em; line-height: 1; font-weight: 600; }
 h1 { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; line-height: 0.95; }
 h2 { font-size: 24px; }
@@ -174,7 +171,7 @@ input[type="checkbox"]:checked::after { content: ""; width: 6px; height: 3px; bo
 .win-controls button.close:hover { color: var(--ink); background: var(--signal); }
 .win-controls button:active svg { transform: scale(0.88); }
 .win-controls svg { transition: transform 120ms var(--ease-out-expo); }
-.brand { background: none; border: 0; display: flex; align-items: center; padding: 0 20px; border-right: 1px solid var(--hair); gap: 8px; color: var(--paper); font: 700 17px -apple-system, system-ui, "Segoe UI", sans-serif; }
+.brand { background: none; border: 0; display: flex; align-items: center; padding: 0 20px; border-right: 1px solid var(--hair); gap: 8px; color: var(--paper); font: 700 17px var(--sans); }
 .brand-mark { color: var(--accent); font-size: 20px; line-height: 1; }
 .logo-lockup { display: inline-flex; align-items: center; gap: 10px; }
 .logo-words { display: flex; flex-direction: column; line-height: 1; gap: 3px; text-align: left; }

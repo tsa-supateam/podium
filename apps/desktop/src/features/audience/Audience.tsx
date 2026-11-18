@@ -367,7 +367,7 @@ function zTexture(): THREE.CanvasTexture {
   cv.width = cv.height = 64;
   const ctx = cv.getContext("2d")!;
   ctx.fillStyle = C.paper;
-  ctx.font = "600 52px 'Chakra Petch', sans-serif";
+  ctx.font = "600 52px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText("z", 32, 34);
@@ -594,11 +594,11 @@ function drawAtlas(cv: HTMLCanvasElement) {
   ctx.fillStyle = C.paper;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = "600 26px 'JetBrains Mono', monospace";
+  ctx.font = "600 26px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
   for (let i = 0; i < 20; i++) ctx.fillText(String(i + 1).padStart(2, "0"), (i % 10) * 64 + 32, Math.floor(i / 10) * 40 + 20);
-  ctx.font = "700 52px 'Chakra Petch', sans-serif";
+  ctx.font = "700 52px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
   ["A", "B", "C"].forEach((l, i) => ctx.fillText(l, i * 64 + 32, 128));
-  ctx.font = "700 44px 'Chakra Petch', sans-serif";
+  ctx.font = "700 44px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
   ctx.fillText("EXIT", 352, 128);
   // logo for the LED wall and the lectern engraving: the half-filled circle mark (◐) used in the top bar
   const logo = (x: number, y: number, s: number) => {
@@ -619,7 +619,7 @@ function drawAtlas(cv: HTMLCanvasElement) {
   logo(70, 279, 210);
   ctx.fillStyle = C.paper;
   ctx.textAlign = "left";
-  ctx.font = "700 120px -apple-system, system-ui, 'Segoe UI', sans-serif";
+  ctx.font = "700 120px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
   ctx.fillText("Podium", 320, 390);
   logo(810, 240, 120);
 }
@@ -655,14 +655,7 @@ function useAtlas(): THREE.CanvasTexture {
     return t;
   }, []);
   useEffect(() => {
-    // redraw once the bundled fonts are ready (the first draw may use fallbacks)
-    let alive = true;
-    void Promise.all([document.fonts.load("700 52px 'Chakra Petch'"), document.fonts.load("600 26px 'JetBrains Mono'")]).then(() => {
-      if (!alive) return;
-      drawAtlas(tex.image as HTMLCanvasElement);
-      tex.needsUpdate = true;
-    }).catch(() => {});
-    return () => { alive = false; tex.dispose(); };
+    return () => tex.dispose();
   }, [tex]);
   return tex;
 }
