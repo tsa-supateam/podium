@@ -153,6 +153,18 @@ class Server:
             from .. import learn
 
             await self.reply(ev, "learn", {"lessons": learn.mark_lesson(str(d["lessonId"])[:80], bool(d.get("done", True)))})
+        elif t == "learn.game":
+            from .. import learn
+
+            await self.reply(ev, "learn", {"games": learn.record_game(str(d["game"]), float(d["score"]), float(d["max"]))})
+        elif t == "learn.equip":
+            from .. import learn
+
+            await self.reply(ev, "learn", {"equipped": learn.equip(str(d["slot"]), str(d["item"]))})
+        elif t == "learn.seen":
+            from .. import learn
+
+            await self.reply(ev, "learn", {"seenUnlocks": learn.mark_seen(list(d.get("ids") or [])[:100])})
         elif t == "achievements.list":
             from .. import achievements
 
@@ -201,6 +213,12 @@ class Server:
 
         if d.get("drill") in learn.CHECKS:  # a Learn practice: checked against one skill
             extra["drill"] = d["drill"]
+            if d.get("game") == "paceRunner":  # the Pace Runner game is a speed practice with a live overlay
+                extra["game"] = "paceRunner"
+        boss = str(d.get("boss") or "")
+        if boss.isalpha() and len(boss) <= 24:  # a module boss: one run checked against every skill in the module
+            extra["boss"] = boss
+            extra["checks"] = [c for c in (d.get("checks") or []) if c in learn.CHECKS][:8]
         title = d.get("title") or "Practice run"
         replay_from = d.get("replaySessionId")
         mode = "replay" if replay_from else d.get("mode", "practice")

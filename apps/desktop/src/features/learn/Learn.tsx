@@ -6,9 +6,15 @@ import { engine } from "../../lib/engine";
 import type { SessionRow } from "../../lib/types";
 import { useApp } from "../../stores/app";
 import {
-  MASTERY, MODULES, type LearnStatus, type Mastery, type Module, type Skill, mastery, moduleProgress, skillById,
+  MASTERY, MODULES, type LearnStatus, type Mastery, type Module, type Skill, isRusty, mastery, moduleProgress, skillById,
 } from "./curriculum";
-import { TREE, XP, demoStatus, level, lockReason, streak, testClaim, unlocked, xpOf } from "./game";
+import {
+  TREE, UNLOCKABLES, XP, bossBeaten, bossReady, demoStatus, equipped, isUnlocked, level, lockReason, streak, testClaim, unlocked, xpOf,
+} from "./game";
+import { GameShell } from "./games/GameShell";
+import { Locker, PlaySection, rustySkills, startPractice } from "./games/Play";
+import { GAMES } from "./games/QuickGames";
+import { BossCard } from "./games/Speak";
 import { Icon, MODULE_ICON } from "../../ui/icons";
 import { ScreenHeader, Stepper } from "../../ui/kit";
 import { LessonFlow, latestRun } from "./LessonFlow";
@@ -39,20 +45,32 @@ export default function Learn() {
   useEffect(() => {
     prev.current = depth;
   }, [depth]);
-  const key = `${path.module ?? ""}/${path.skill ?? ""}`;
+  const game = GAMES.find((g) => g.id === path.game);
+  const key = `${path.module ?? ""}/${path.skill ?? ""}/${game || path.game === "locker" ? path.game : ""}`;
+  // Cosmetics from the Locker: accent color, ring style and XP bar style for all of Learn.
+  const eq = equipped(st, xpOf(st), false);
+  const look = { transformOrigin: origin, ["--accent-pick" as string]: eq.accent.value };
   return (
-    <div key={key} className={`learn-view zoom-${dir}`} style={{ transformOrigin: origin }}>
-      {skill && mod ? <SkillPage mod={mod} skill={skill} st={st} setSt={setSt} demo={demo} />
+    <div key={key} className={`learn-view zoom-${dir} ring-${eq.ring.value} xp-${eq.xpBar.value}`} style={look}>
+      {game ? <GameShell def={game} st={st} setSt={setSt} demo={demo} onExit={() => nav(null, null, undefined, "play")}
+          onLesson={(id) => nav(skillById(id)!.module.id, id)} />
+        : path.game === "locker" ? <Locker st={st} setSt={setSt} demo={demo} />
+        : skill && mod ? <SkillPage mod={mod} skill={skill} st={st} setSt={setSt} demo={demo} />
         : mod ? <ModulePage mod={mod} st={st} demo={demo} />
-        : <Course st={st} demo={demo} />}
+        : <Course st={st} setSt={setSt} demo={demo} tab={path.game === "play" ? "play" : null} />}
     </div>
   );
 }
 
-const nav = (module: string | null, skill: string | null = null, e?: { clientX: number; clientY: number }) => {
+const nav = (module: string | null, skill: string | null = null, e?: { clientX: number; clientY: number }, game: string | null = null) => {
   origin = e ? `${Math.round((e.clientX / innerWidth) * 100)}% ${Math.round((e.clientY / innerHeight) * 100)}%` : "50% 30%";
-  useApp.getState().set({ learnPath: { module, skill } });
+  useApp.getState().set({ learnPath: { module, skill, game } });
 };
+
+/** Path (the skill tree) or Play (games), remembered per viewer. */
+type Tab = "path" | "play";
+const savedTab = (): Tab => { try { return localStorage.getItem("learn.tab") === "play" ? "play" : "path"; } catch { return "path"; } };
+const saveTab = (t: Tab) => { try { localStorage.setItem("learn.tab", t); } catch { /* private window */ } };
 
 function MasteryChip({ m }: { m: Mastery }) {
   return <span className={`mastery-chip m${m}`}>{MASTERY[m].name}</span>;
@@ -109,8 +127,19 @@ export function Ring({ value, size = 120, stroke = 8, children, tone = "signal" 
 }
 
 // ---------------------------------------------------------------- course overview
-function Course({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
+function Course({ st, setSt, demo, tab: forced }: { st: LearnStatus | null; setSt: (s: LearnStatus) => void; demo: boolean; tab: Tab | null }) {
   const [last, setLast] = useState<SessionRow | null>(null);
+  const [tab, setTabState] = useState<Tab>(() => forced ?? savedTab());
+  const setTab = (t: Tab) => { setTabState(t); saveTab(t); if (forced) useApp.getState().set({ learnPath: { module: null, skill: null, game: null } }); };
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest("input, textarea, select") || e.metaKey || e.ctrlKey) return;
+      if (e.key.toLowerCase() === "p") setTab(tab === "path" ? "play" : "path");
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  });
+  useUnlockToast(st, demo, setSt);
   useEffect(() => {
     engine.request<SessionRow[]>("sessions.list", { limit: 20 })
       .then((rows) => setLast(rows.find((r) => r.overall != null && !r.title.startsWith("Practice:")) ?? null))
@@ -127,10 +156,20 @@ function Course({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
   const xp = xpOf(st), lv = level(xp);
   const sk = streak(st?.activity);
   const passed = Object.values(st?.checks ?? {}).filter((c) => c.attempts.some((a) => a.passed)).length;
+  const rusty = rustySkills(st);
+  const badge = equipped(st, xp, demo).badge;
+  const playNew = rusty.length > 0 || GAMES.some((g) => !(st?.games?.[g.id]?.length));
 
   return (
     <div className="page learn stagger">
       <ScreenHeader title="Learn" meta={demo ? ["Judge demo mode: sample progress"] : undefined}>
+        <div className="segmented learn-tabs" role="tablist" aria-label="Learn view">
+          {(["path", "play"] as Tab[]).map((t) => (
+            <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setTab(t)} title="Press P to switch">
+              {t === "path" ? "Path" : "Play"}{t === "play" && playNew && tab !== "play" && <i className="tab-dot" aria-label="Something new" />}
+            </button>
+          ))}
+        </div>
         {rec && (
           <button className="rec-orb" onClick={(e) => nav(rec.id, null, e)} title={`Recommended from your last run: ${rec.title}. ${rec.improves}`}
             aria-label={`Start recommended module: ${rec.title}`}>
@@ -153,6 +192,7 @@ function Course({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
           <div className="row" style={{ gap: 10, alignItems: "baseline" }}>
             <span className="hud-level">LV {String(lv.level).padStart(2, "0")}</span>
             <b className="hud-rank">{lv.rank}</b>
+            {badge.value && <span className="hud-badge">{badge.value}</span>}
             <span className="spacer" />
             <span className="micro">{xp.toLocaleString()} XP</span>
           </div>
@@ -166,6 +206,11 @@ function Course({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
             <span><b>{MODULES.filter((m) => unlocked(m, st, demo)).length}/{MODULES.length}</b><span className="micro">modules unlocked</span></span>
           </div>
         </div>
+        {rusty.length > 0 && (
+          <button className="hud-rust" onClick={() => setTab("play")} title={`Rusty: ${rusty.map((s) => s.title).join(", ")}. Review them in Play.`}>
+            <span className="rust-mark" aria-hidden /><b>{rusty.length}</b><span className="micro">rusty</span>
+          </button>
+        )}
         <div className={`hud-streak ${sk.days ? "lit" : ""}`} title={sk.today ? "You practiced today" : sk.days ? "Practice today to keep your streak" : "Practice today to start a streak"}>
           <Flame lit={sk.days > 0} />
           <b>{sk.days}</b>
@@ -176,9 +221,15 @@ function Course({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
         </div>
       </section>
 
-      <div className="skill-tree-wrap scroll">
-        <SkillTree st={st} demo={demo} />
-      </div>
+      {tab === "path" ? (
+        <div className="skill-tree-wrap scroll">
+          <SkillTree st={st} demo={demo} />
+        </div>
+      ) : (
+        <div className="play-wrap scroll">
+          <PlaySection st={st} demo={demo} />
+        </div>
+      )}
     </div>
   );
 }
@@ -219,8 +270,10 @@ function SkillTree({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
         const t = TREE[m.id];
         const open = unlocked(m, st, demo);
         const pct = moduleProgress(m, st);
+        const rust = m.skills.some((s) => isRusty(s, st));
+        const boss = bossBeaten(m, st) ? "beaten" : open && bossReady(m, st, demo) ? "ready" : "";
         return (
-          <button key={m.id} role="listitem" className={`tree-node ${open ? "open" : "locked"} ${pct >= 100 ? "maxed" : ""}`}
+          <button key={m.id} role="listitem" className={`tree-node ${open ? "open" : "locked"} ${pct >= 100 ? "maxed" : ""} ${rust ? "rusty" : ""}`}
             style={{ left: `${X(t.col)}%`, top: `${Y(t.row)}%`, animationDelay: `${120 + i * 50}ms` }}
             onClick={(e) => nav(m.id, null, e)} title={open ? m.improves : lockReason(m)}>
             <Ring value={pct / 100} size={64} stroke={4} tone={pct >= 100 ? "good" : open ? "signal" : "dim"}>
@@ -229,7 +282,11 @@ function SkillTree({ st, demo }: { st: LearnStatus | null; demo: boolean }) {
             <span className="node-text">
               <b>{m.title}</b>
               <span className="micro">{open ? `${pct}% · ${m.skills.length} skills` : "Locked"}</span>
-              <MasterySquares mod={m} st={st} />
+              <span className="node-marks">
+                <MasterySquares mod={m} st={st} />
+                {boss && <i className={`boss-diamond ${boss}`} title={boss === "beaten" ? "Boss defeated" : "Boss ready"} />}
+                {rust && <i className="rust-mark" title="A skill here is rusty" />}
+              </span>
             </span>
           </button>
         );
@@ -355,6 +412,7 @@ function ModulePage({ mod, st, demo }: { mod: Module; st: LearnStatus | null; de
                     <b>{s.title}</b>
                     <span className="path-row-sub">{s.practice.target}</span>
                   </span>
+                  {isRusty(s, st) && <span className="rust-tag"><span className="rust-mark" aria-hidden /> Rusty</span>}
                   <LastTalk s={s} st={st} />
                   <SkillPips s={s} st={st} />
                   <span className="path-go">{k.passed ? "Review" : "Start"} <Icon name="arrowR" size={12} /></span>
@@ -363,6 +421,8 @@ function ModulePage({ mod, st, demo }: { mod: Module; st: LearnStatus | null; de
             </li>
           );
         })}
+        <li className="path-step boss-step"><span className="path-node boss-node" aria-hidden><i className="boss-diamond" /></span>
+          <BossCard m={mod} st={st} ready={open && bossReady(mod, st, demo)} demo={demo} /></li>
       </ol>
     </div>
   );
@@ -408,6 +468,13 @@ function SkillPage({ mod, skill, st, setSt, demo }: { mod: Module; skill: Skill;
         <MasteryChip m={m} />
       </div>
 
+      {isRusty(skill, st) && (
+        <div className="rust-banner">
+          <span className="rust-mark" aria-hidden />
+          <span><b>Rusty.</b> You mastered this, then it slipped in your recent full talks. Pass one review practice to polish it (+{XP.review} XP).</span>
+          <button className="btn small primary" onClick={() => startPractice(skillById(skill.id)!)}>Review now</button>
+        </div>
+      )}
       <div className="skill-layout">
         <LessonFlow key={skill.id} skill={skill} check={c} done={lessonDone} canPractice={open}
           onComplete={() => void markRead(true)} onPractice={practice}
@@ -427,6 +494,11 @@ function SkillPage({ mod, skill, st, setSt, demo }: { mod: Module; skill: Skill;
               <div className="lock-banner"><Icon name="lock" size={14} /> {lockReason(mod)}</div>
             )}
             {skill.check === "claim_up_front" && <ClaimTester prompt={P.prompt} />}
+            {GAMES.filter((g) => g.skills.includes(skill.id)).map((g) => (
+              <button key={g.id} className="warmup" onClick={(e) => nav(null, null, e, g.id)}>
+                <Icon name={g.icon} size={14} /> <span>Warm up first: <b>{g.title}</b></span> <span className="micro">{g.minutes}</span>
+              </button>
+            ))}
             {c && c.attempts.length > 0 && (
               <div className="practice-tries">
                 <span className="micro">Your tries</span>
@@ -501,4 +573,19 @@ export function DrillResult({ drill }: { drill: { id: string; value: number | nu
       <button className="btn primary" onClick={back}>Back to skill</button>
     </section>
   );
+}
+
+// ---------------------------------------------------------------- unlock toast
+/** Tells you once when something new lands in the Locker. */
+function useUnlockToast(st: LearnStatus | null, demo: boolean, setSt: (s: LearnStatus) => void) {
+  useEffect(() => {
+    if (!st || demo || !st.seenUnlocks) return;
+    const xp = xpOf(st);
+    const fresh = UNLOCKABLES.filter((u) => u.how !== "Default" && isUnlocked(u, st, xp) && !st.seenUnlocks!.includes(u.id));
+    if (!fresh.length) return;
+    useApp.getState().set({ toast: `Unlocked in the Locker: ${fresh.map((u) => u.name).join(", ")}` });
+    const ids = [...st.seenUnlocks, ...fresh.map((u) => u.id)];
+    setSt({ ...st, seenUnlocks: ids });
+    void engine.request("learn.seen", { ids: fresh.map((u) => u.id) }).catch(() => {});
+  }, [st, demo]); // eslint-disable-line react-hooks/exhaustive-deps
 }

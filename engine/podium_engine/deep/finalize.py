@@ -132,6 +132,12 @@ def finalize(session_dir: Path, base: dict, words: list[Word], meta: dict, answe
         from .. import learn
 
         summary["drill"] = learn.evaluate(meta["drill"], summary)
+        if meta.get("game") == "paceRunner":
+            summary["paceRunner"] = learn.pace_runner(summary)
+    if meta.get("boss"):  # a module boss: every listed check at once
+        from .. import learn
+
+        summary["boss"] = learn.boss_result(meta["boss"], meta.get("checks") or [], summary)
     (session_dir / "debrief.txt").write_text(deb["text"] + "\n")
     if with_tts and not is_answer and tts.available():
         try:

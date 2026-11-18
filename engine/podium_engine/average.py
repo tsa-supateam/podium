@@ -47,7 +47,7 @@ def runs(speech_type: str | None = None) -> list[tuple[dict, dict]]:
     for d in sorted(p for p in root.iterdir() if p.is_dir()) if root.exists() else []:
         meta, s = _load(d / "session.json"), _load(d / "summary.json")
         if (not meta or not s or meta.get("status") != "analyzed" or meta.get("mode") in ("qa", "replay")
-                or meta.get("drill") or s.get("noSpeech")):
+                or meta.get("drill") or meta.get("boss") or s.get("noSpeech")):
             continue
         kind = "impromptu" if meta.get("speechType") == "impromptu" else "prepared"
         if speech_type and kind != speech_type:

@@ -12,6 +12,13 @@ export interface Drill {
   check: string;
   prompt: string;
   seconds: number;
+  /** Learn's speaking games (Pace Runner, a module boss) bring their own title, goal and checks. */
+  game?: "paceRunner" | "boss";
+  boss?: string; // module id
+  checks?: string[];
+  title?: string;
+  instruction?: string;
+  target?: string;
 }
 
 export interface QARound {
@@ -62,7 +69,7 @@ interface AppState {
   /** Background analysis progress of the main speech (shown during Q&A). */
   mainAnalysis: { stage: string; pct: number; done: boolean } | null;
   drill: Drill | null;
-  learnPath: { module: string | null; skill: string | null };
+  learnPath: { module: string | null; skill: string | null; game?: string | null };
   toast: string | null;
   set: (p: Partial<AppState>) => void;
   setSettings: (p: Partial<Settings>) => void;

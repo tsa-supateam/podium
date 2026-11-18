@@ -359,7 +359,7 @@ function Ready({ skill, earned, canPractice, onPractice, onNextSkill, onReview }
 
 // ---------------------------------------------------------------- listen (local TTS)
 const voices = new Map<string, Promise<string>>();
-function exampleVoice(text: string, style: "weak" | "strong"): Promise<string> {
+export function exampleVoice(text: string, style: "weak" | "strong"): Promise<string> {
   const k = `${style}|${text}`;
   if (!voices.has(k)) {
     const p = engine.request<ArrayBuffer>("tts.speak", { text, style }, 60000)

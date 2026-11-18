@@ -8,6 +8,7 @@ import { Odometer } from "../../ui/kit";
 import AudienceScene from "../audience/Audience";
 import { token } from "../debrief/charts";
 import CueWord from "./Cue";
+import { BossLive, PaceRunnerLive } from "../learn/games/Speak";
 import { stopSession, togglePause } from "./session";
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -94,7 +95,8 @@ function WaveStrip({ pulse, active }: { pulse: React.RefObject<HTMLDivElement | 
 }
 
 export default function Live() {
-  const { settings, replayFrom, replayDuration, qa, paused } = useApp();
+  const { settings, replayFrom, replayDuration, qa, paused, drill } = useApp();
+  const speakGame = !replayFrom && drill?.game ? drill : null;
   const answering = qa?.answering && qa.questions ? qa : null;
   const question = answering ? answering.questions![answering.picked[answering.index]].question : null;
   const pipRef = useRef<HTMLVideoElement>(null);
@@ -122,16 +124,19 @@ export default function Live() {
   const elapsed = tick?.t ?? 0;
   const E = tick?.E ?? 70;
   const flash = live.lastFiller && performance.now() - live.lastFiller.at < 1400 ? live.lastFiller : null;
-  const target = answering ? answering.seconds : settings.targetMinutes ? settings.targetMinutes * 60 : null;
+  const target = answering ? answering.seconds : speakGame ? speakGame.seconds : settings.targetMinutes ? settings.targetMinutes * 60 : null;
   const left = answering ? Math.max(0, answering.seconds - elapsed) : null;
   const band = SPEED_BANDS[answering ? "impromptu" : settings.speechType];
   const wpm = live.pace && live.pace.label !== "pause" ? live.pace.wpmEma : null;
   const WPM_MAX = 240;
 
-  // An answer stops itself at its time limit.
+  // An answer stops itself at its time limit; so do Learn's speaking games.
   useEffect(() => {
     if (left !== null && left <= 0) void stopSession();
   }, [left]);
+  useEffect(() => {
+    if (speakGame && elapsed >= speakGame.seconds) void stopSession();
+  }, [speakGame, elapsed]);
 
   return (
     <div className="live2">
@@ -171,12 +176,14 @@ export default function Live() {
           </div>
         )}
         <AudienceScene size={20} live={!replayFrom && !paused} />
+        {speakGame?.game === "paceRunner" && <PaceRunnerLive elapsed={elapsed} paused={paused} />}
+        {speakGame?.game === "boss" && <BossLive />}
         {flash && !paused && (
           <div className="filler-flash" key={flash.at} style={question ? { top: 104 } : undefined}>
             “{flash.token}”
           </div>
         )}
-        {settings.difficulty === "coach" && !paused && <CueWord />}
+        {settings.difficulty === "coach" && !paused && speakGame?.game !== "paceRunner" && <CueWord />}
         {paused && (
           <div className="paused-overlay">
             <b>Paused</b>

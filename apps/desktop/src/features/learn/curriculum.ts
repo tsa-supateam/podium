@@ -600,12 +600,33 @@ export const SKILL_FOR_METRIC: Record<string, string> = {
 export interface CheckStatus {
   attempts: { id: string; value: number | null; passed: boolean; sessionId: string; at: string | null }[];
   recent: { id: string; value: number | null; passed: boolean }[];
+  /** Mastered at some point (a practice passed and 2 of 3 full runs in a row passed). */
+  everMastered?: boolean;
+  /** Was mastered, then slipped in a full run. A passed practice (a review) clears it. */
+  rusty?: boolean;
+  rustySince?: string | null;
+  /** How many times rust was cleared (each is worth review XP). */
+  rustCleared?: number;
 }
+export interface BossAttempt {
+  module: string;
+  results: { id: string; value: number | null; passed: boolean }[];
+  passed: boolean;
+  sessionId: string;
+  at: string | null;
+}
+export interface PaceRun { inBandPct: number; bestStreakSec: number; band: number[]; sessionId: string; at: string | null }
+export interface GamePlay { at: string; score: number; max: number }
 export interface LearnStatus {
   lessons: string[];
-  /** When you did something (lessons, practices, runs), for the daily streak. */
+  /** When you did something (lessons, practices, runs, games), for the daily streak. */
   activity?: string[];
   checks: Record<string, CheckStatus>;
+  bosses?: Record<string, BossAttempt[]>;
+  paceRunner?: PaceRun[];
+  games?: Record<string, GamePlay[]>;
+  equipped?: Partial<Record<"accent" | "ring" | "xpBar" | "badge", string>>;
+  seenUnlocks?: string[];
 }
 
 export type Mastery = 0 | 1 | 2 | 3; // not started, familiar, proficient, mastered
@@ -618,17 +639,21 @@ export const MASTERY = [
 export const MASTERY_POINTS = [0, 50, 80, 100];
 
 /** Familiar: lesson read or a practice tried. Proficient: a practice passed.
- *  Mastered: practice passed and the skill shows up in 2 of your last 3 full runs. */
+ *  Mastered: practice passed and the skill shows up in 2 of your last 3 full runs. A mastered skill
+ *  that slips in later runs is rusty (shown as Mastered, with rust) until a review practice passes. */
 export function mastery(skill: Skill, st: LearnStatus | null): Mastery {
   if (!st) return 0;
   const c = st.checks[skill.check];
   const passed = !!c?.attempts.some((a) => a.passed);
   const inRuns = (c?.recent ?? []).filter((r) => r.passed).length >= 2;
-  if (passed && inRuns) return 3;
+  if ((passed && inRuns) || (c?.everMastered && !c.rusty)) return 3;
+  if (c?.rusty) return 2;
   if (passed) return 2;
   if (st.lessons.includes(skill.id) || (c?.attempts.length ?? 0) > 0) return 1;
   return 0;
 }
+
+export const isRusty = (skill: Skill, st: LearnStatus | null) => !!st?.checks[skill.check]?.rusty;
 
 export function moduleProgress(m: Module, st: LearnStatus | null): number {
   const pts = m.skills.reduce((a, s) => a + MASTERY_POINTS[mastery(s, st)], 0);

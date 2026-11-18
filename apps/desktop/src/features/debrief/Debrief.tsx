@@ -6,6 +6,7 @@ import { CONTENT_PARTS, DELIVERY_METRICS, OVERALL_HOW, TOP_METRICS, clusteringWo
 import { keyMoments } from "../../lib/moments";
 import { AchievementBanner } from "../achievements/achievements";
 import { DrillResult } from "../learn/Learn";
+import { BossResult, PaceRunnerResult } from "../learn/games/Speak";
 import { SKILL_FOR_METRIC, skillById } from "../learn/curriculum";
 import { EngagementChart, Gauge, GazeHeatmap, Radar, Timeline, ZoneBars, engagementHeadline, scoreColor } from "./charts";
 import { Icon } from "../../ui/icons";
@@ -135,8 +136,9 @@ export default function Debrief() {
       </aside>
 
       <div className="debrief-main scroll">
-      {s.drill && <DrillResult drill={s.drill} />}
-      {sid && bundle.session?.mode !== "replay" && !s.drill && <AchievementBanner sessionId={sid} />}
+      {s.paceRunner ? <PaceRunnerResult r={s.paceRunner} passed={s.drill?.passed} /> : s.drill && <DrillResult drill={s.drill} />}
+      {s.boss && <BossResult boss={s.boss} />}
+      {sid && bundle.session?.mode !== "replay" && !s.drill && !s.boss && <AchievementBanner sessionId={sid} />}
       {s.noSpeech && (
         <div className="card warn-card">
           <Icon name="warn" size={14} /> <b>No speech detected.</b> <span className="muted">Check the mic meter on the setup screen and System Settings → Privacy &amp; Security → Microphone.</span>

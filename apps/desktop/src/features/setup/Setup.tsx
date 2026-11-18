@@ -6,6 +6,7 @@ import { zoneNames } from "../../lib/types";
 import { live, useApp, useTicker } from "../../stores/app";
 import { startSession } from "../live/session";
 import { skillById } from "../learn/curriculum";
+import { SpeakGameCard } from "../learn/games/Speak";
 import { Icon } from "../../ui/icons";
 import { Corners, ScreenHeader } from "../../ui/kit";
 
@@ -94,7 +95,7 @@ export default function Setup() {
         </div>
 
         <div className="setup-col">
-          {drill ? <DrillCard /> : <PromptPicker />}
+          {drill?.game ? <SpeakGameCard /> : drill ? <DrillCard /> : <PromptPicker />}
           <div className="card grid">
             <div className="toggle-grid">
             <Toggle

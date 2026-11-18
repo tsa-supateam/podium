@@ -193,6 +193,10 @@ export interface Summary {
   } | null;
   /** A Learn practice's result against its skill's check. */
   drill?: { id: string; value: number | null; passed: boolean } | null;
+  /** Learn's Pace Runner: share of speaking time inside the target band. */
+  paceRunner?: { inBandPct: number; bestStreakSec: number; band: number[] } | null;
+  /** A module boss: every check in the module, in one run. */
+  boss?: { module: string; results: { id: string; value: number | null; passed: boolean }[]; passed: boolean } | null;
   qaRound?: {
     sessionId: string; question: string; onTopic: boolean; mentioned: string[]; durationSec: number; wpm: number; fillers: number; words: number;
     /** The answer's own report, analyzed the same way as the speech (missing on older sessions). */
