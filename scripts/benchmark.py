@@ -2,7 +2,7 @@
 
     cd engine && uv run python ../scripts/benchmark.py [path/to/speech.wav]
 
-Prints a table you can paste into the documentation portfolio:
+Prints a table with:
   * real-time factor of the live engine (how much faster than real time one 20 ms hop is processed)
   * p50 / p95 per-hop processing time
   * filler alert latency: audio time between the end of a filler and the moment it was reported

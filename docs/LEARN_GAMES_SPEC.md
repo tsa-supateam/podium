@@ -1,6 +1,6 @@
 # Learn: Play section and game layer
 
-Status: **implemented**. This describes what was built.
+Status: **implemented**. This doc covers how the Play section and the games work in the current build.
 
 Main files:
 - `apps/desktop/src/features/learn/games/`:
@@ -27,9 +27,9 @@ Main files:
 
 | | Decision | What it means in the build |
 |---|---|---|
-| D1 | The Setup screen may change **only** for Pace Runner and boss fights | `Setup.tsx` renders `SpeakGameCard` instead of `DrillCard` only when `drill.game` is set. A regular practice shows exactly the old card. Nothing else on the screen changed. |
+| D1 | The Setup screen only changes for Pace Runner and boss fights | `Setup.tsx` renders `SpeakGameCard` instead of `DrillCard` only when `drill.game` is set. A regular practice shows exactly the old card. Nothing else on the screen changed. |
 | D2 | Bosses are **optional** and unlock the cosmetics | The skill tree still unlocks as before, from one Proficient skill in the prerequisite. A boss win pays XP and unlocks that module's title. Any first win unlocks the Violet accent, and all eight unlock Diamond. |
-| D3 | Game content may be authored | About 150 items in `content.ts`, guarded by `content.test.ts`. |
+| D3 | Game content is hand-written | About 150 items in `content.ts`, guarded by `content.test.ts`. |
 
 ## How the design teaches
 
@@ -42,7 +42,7 @@ Main files:
 
 ## Placement
 
-- **Path / Play switch.** It sits in the Learn header and is remembered per viewer in `localStorage` (`learn.tab`). `P` toggles it. A dot on Play means something is waiting: a rusty skill or a game you haven't played.
+- **Path / Play switch.** It sits in the Learn header, and the last tab you picked is saved in `localStorage` (`learn.tab`). `P` toggles it. A dot on Play means something is waiting: a rusty skill or a game you haven't played.
 - **Play section:**
   - four quick-game cards, each showing best score, module and XP plays left today;
   - Pace Runner, with a history of runs and a 60 s or 90 s length;
@@ -92,7 +92,7 @@ Main files:
 - every speech has all four lanes and its signposts;
 - all ids are unique.
 
-While writing the pairs, the claim grader turned out to miss stances like "is worth" and "are good". The `STANCE` pattern was widened, which also improves the existing Claim Tester.
+While we were writing the pairs we noticed the claim grader missed stances like "is worth" and "are good". We widened the `STANCE` pattern, which also made the Claim Tester better.
 
 ## Pace Runner
 
@@ -156,7 +156,7 @@ How it works:
 - New unlocks show a toast once, tracked by `learn.seen`.
 - Demo mode unlocks everything and equips for the session only.
 
-The planned "coach voice" slot was dropped: the only Listen buttons are the weak and strong examples, whose styles are the lesson, so a voice skin had nowhere meaningful to apply.
+We dropped the planned "coach voice" slot. The only Listen buttons are the weak and strong examples, and their voice styles are the whole point of the lesson, so a voice skin didn't really have anywhere to go.
 
 ## Engine and API
 

@@ -5,26 +5,27 @@
 | | |
 |---|---|
 | Document | Technical Software Specification v1.0 |
-| Status | Draft for implementation |
+| Status | Implemented (v1.0) |
 | Target event | TSA Software Development |
 | Runtime constraint | 100% offline, all inference local (CPU baseline, GPU optional) |
 | Reference hardware | 4-core x86-64 or Apple Silicon laptop, 8 GB RAM, 720p webcam, built-in mic, no discrete GPU |
 
-> "Podium" is a working name. Replace it everywhere if your team picks another.
+### What changed while we built it
 
-> **Implementation status (v0.1).** The repo implements this spec end to end. Where the build differs
-> from the original plan, the reason is recorded in `docs/adr/`:
-> - Vosk's small model cannot emit "um"/"uh", so live filled pauses use a *sound-alike* rule on timed
->   partial results plus an acoustic detector (ADR 0003). Measured live alert latency is about 1.6 s,
->   not the 0.6 s target.
-> - Deep pitch tracking uses Praat (Parselmouth) instead of `librosa.pyin`: pYIN took 7.4 s on 30 s of
->   audio, Praat takes 0.03 s. Librosa still provides RMS energy.
-> - Face tracking runs on the renderer main thread (GPU delegate), not a Web Worker (ADR 0002).
-> - IPC uses JSON, not MessagePack, and the engine timestamps gaze samples on arrival instead of
->   running clock sync (ADR 0004).
-> - The SQLite session index lives in the Python engine (stdlib `sqlite3`) rather than `better-sqlite3`
->   in Electron, which avoids a native Node module rebuild.
-> - Measured numbers are in `docs/evaluation/README.md`.
+We wrote this spec before building Podium, and most of it held up. A few things didn't work out the
+way we planned, so we changed them (the reasoning for each one is in `docs/adr/`):
+
+- Vosk's small model can't output "um" or "uh" at all, so live filled pauses use a *sound-alike* rule
+  on timed partial results plus an acoustic detector (ADR 0003). Live alerts land about 1.6 s after
+  the filler, not the 0.6 s we were aiming for.
+- Deep pitch tracking uses Praat (Parselmouth) instead of `librosa.pyin`. pYIN took 7.4 s on 30 s of
+  audio and Praat takes 0.03 s. We still use librosa for RMS energy.
+- Face tracking runs on the renderer main thread (GPU delegate) and not in a Web Worker (ADR 0002).
+- IPC uses JSON instead of MessagePack, and the engine timestamps gaze samples when they arrive
+  instead of running a clock sync (ADR 0004).
+- The SQLite session index lives in the Python engine (stdlib `sqlite3`) and not `better-sqlite3` in
+  Electron. That way we don't have to rebuild a native Node module.
+- Our measured numbers are in `docs/evaluation/README.md`.
 
 ---
 
@@ -39,8 +40,7 @@
 7. [Performance Budgets and Degradation](#7-performance-budgets-and-degradation)
 8. [Testing and Validation](#8-testing-and-validation)
 9. [Risk Register](#9-risk-register)
-10. [TSA Competition Strategy](#10-tsa-competition-strategy)
-11. [Appendix: Default Constants](#appendix-a-default-constants)
+10. [Appendix: Default Constants](#appendix-a-default-constants)
 
 ---
 
@@ -231,7 +231,7 @@ The deep engine is a separate `multiprocessing` process with `spawn` start metho
 | TTS | **Piper** (ONNX voice, e.g. `en_US-lessac-medium`, ~60 MB) | Natural voice, faster than real-time on CPU | Web Speech API restricted to `voice.localService === true` |
 | Storage | NDJSON telemetry files + **SQLite** (`better-sqlite3`) session index | Append-only (crash-safe), easy to inspect, queryable history | — |
 | Testing | **pytest**, **hypothesis**, **Vitest**, **Playwright** (Electron) | Unit + property + end-to-end | — |
-| Lint / format | ruff, mypy --strict, ESLint, Prettier | Shows engineering discipline | — |
+| Lint / format | ruff, mypy --strict, ESLint, Prettier | Catches bugs early and keeps the style consistent | — |
 
 ### 3.2 Bundled Model Manifest
 
@@ -246,9 +246,9 @@ All models are fetched once at **build time** by `scripts/fetch_models.py`, veri
 | faster-whisper `base.en` (CT2 int8) | 75–145 MB | MIT |
 | Piper voice `en_US-lessac-medium.onnx` | 63 MB | Check the voice's `MODEL_CARD`. Newer Piper releases (`piper1-gpl`) are GPL-3.0. |
 | NLTK data (punkt, averaged_perceptron_tagger, stopwords) | 15 MB | Apache-2.0 / various |
-| `idf_reference.json` (precomputed from a public-domain speech corpus) | 2 MB | Your own derived data |
+| `idf_reference.json` (precomputed from a public-domain speech corpus) | 2 MB | Derived by us from public-domain text |
 
-Total installer size is about 350–450 MB. Record every license in `THIRD_PARTY_NOTICES.md`. Judges check this.
+Total installer size is about 350–450 MB. Every license is listed in `THIRD_PARTY_NOTICES.md`.
 
 ### 3.3 Offline Enforcement (Defense in Depth)
 
@@ -274,7 +274,7 @@ Total installer size is about 350–450 MB. Record every license in `THIRD_PARTY
 
 #### 4.1.3 Filler Word Detection (real time)
 
-Use a **hybrid detector**. Streaming ASR models trained on read speech often drop "um" and "uh", so ASR alone is not enough.
+Filler detection is a **hybrid detector**. Streaming ASR models trained on read speech tend to drop "um" and "uh", so ASR on its own isn't enough.
 
 | Filler class | Examples | Detector |
 |---|---|---|
@@ -286,7 +286,7 @@ Use a **hybrid detector**. Streaming ASR models trained on read speech often dro
 - spectral stability: mean spectral flux below the 30th percentile of that speaker's running distribution;
 - low articulation: no Vosk word boundary inside the segment, or the word is `uh`/`um`/`[unk]`.
 
-These features feed a logistic regression with 8 features. Train it on your team's own labeled clips (§8.2) and ship the weights as JSON. **Stretch goal:** a small log-mel CNN trained offline on the public *PodcastFillers* dataset, exported to ONNX (~1 MB).
+These features feed a logistic regression with 8 features. We train it on our own labelled clips (§8.2) and ship the weights as JSON. **Stretch goal:** a small log-mel CNN trained offline on the public *PodcastFillers* dataset, exported to ONNX (~1 MB).
 
 **Lexical context rules** (cut false positives for "like" and "so"):
 
@@ -312,7 +312,7 @@ The real-time stage accepts lower precision in exchange for speed. The deep engi
 
 #### 4.1.5 Real-Time Prosody
 - YIN f0 on 40 ms frames with 10 ms hop, range 65–400 Hz, only on VAD-voiced frames.
-- Convert to semitones relative to the **speaker baseline** $f_{ref}$, which is the median f0 from the first 20 s of voiced speech, or the calibration read if you add one.
+- Convert to semitones relative to the **speaker baseline** $f_{ref}$, which is the median f0 from the first 20 s of voiced speech.
 - RMS energy in dBFS over the same frames.
 - Rolling 10 s statistics: $\sigma_{st}$ (pitch variability) and the coefficient of variation of RMS. Both feed the Monotony component.
 
@@ -357,7 +357,7 @@ Triggered by `session.stop`. It reads `audio.wav` and the telemetry NDJSON files
 4. One-Euro filter on the angles, then the zone classifier, then sticky HMM smoothing.
 5. Post `gaze.sample` to the main thread, which forwards it to the engine at 30 Hz and also feeds the live mini-map.
 
-**Mirroring:** the camera faces the speaker, so the **speaker's left appears on the image's right**. Negate yaw once, at the source. Write a unit test for this.
+**Mirroring:** the camera faces the speaker, so the **speaker's left appears on the image's right**. Yaw is negated once, at the source, and a unit test checks it.
 
 #### 4.3.2 Zones
 | Code | Zone | Meaning |
@@ -369,7 +369,7 @@ Triggered by `session.stop`. It reads `audio.wav` and the telemetry NDJSON files
 | `X` | Away / No face | Outside every zone, or no face detected |
 
 #### 4.3.3 Calibration (≈ 12 s, skippable)
-The UI shows four targets one at a time (left, center, right, notes). The user looks at each for 2.5 s while the app collects about 60 samples per zone. It then fits a per-zone Gaussian $\mathcal{N}(\mu_z, \Sigma_z)$ in (yaw, pitch) space. If calibration is skipped, the app uses the default angular thresholds (§6.2.3). Calibration makes the system work for any room layout, which is worth pointing out to judges.
+The UI shows four targets one at a time (left, center, right, notes). The user looks at each for 2.5 s while the app collects about 60 samples per zone. It then fits a per-zone Gaussian $\mathcal{N}(\mu_z, \Sigma_z)$ in (yaw, pitch) space. If calibration is skipped, the app uses the default angular thresholds (§6.2.3). Calibration is what lets the system work in any room layout.
 
 #### 4.3.4 Heatmap Output
 - **Continuous heatmap:** a 2-D histogram of (yaw, pitch) in 2° bins, smoothed with a Gaussian kernel (σ = 1.5 bins) and drawn under the zone boundaries.
@@ -403,7 +403,7 @@ stateDiagram-v2
 | **Bored** | Slump, take out phone (screen glows), look sideways, yawn, rest chin on hand |
 | **Confused** | Head tilt, furrowed brow (texture swap), glance at a neighbour |
 
-Each avatar $i$ computes its **own** boredom $b_i$ from the global index, its personality offset, and whether the speaker has been looking at its section (§6.1.4). Looking at the left section makes the left avatars perk up, which is a strong, intuitive moment for a demo.
+Each avatar $i$ computes its **own** boredom $b_i$ from the global index, its personality offset, and whether the speaker has been looking at its section (§6.1.4). So if the speaker looks at the left section, the avatars on the left perk up.
 
 **Render budget:** 60 fps at 1080p on integrated graphics. Frame budget ≤ 4 ms. Shadows are baked; there is one directional light.
 
@@ -420,7 +420,7 @@ GROW_MONOTONE     : "Your pitch varied by only {st} semitones in the {section}. 
 DRILL_PAUSE       : "Drill: read your opening aloud and replace every 'um' with a one-second pause."
 ```
 
-Selection: each template has a trigger predicate and a priority score (severity × how much it would help to fix). Pick the top 2 growth items. Never repeat the same metric.
+Selection: each template has a trigger predicate and a priority score (severity × how much it would help to fix). The top 2 growth items are picked, and the same metric is never used twice.
 
 #### 4.5.2 Follow-Up Question Generator (no LLM)
 
@@ -469,7 +469,7 @@ Selection: each template has a trigger predicate and a priority score (severity 
         └── debrief.wav
 ```
 
-**Why NDJSON:** it is append-only, so a crash loses at most 1 s of data. It streams easily, judges can read it in any text editor, and it loads straight into pandas (`pd.read_json(..., lines=True)`). All timestamps are **seconds since session start** (`float`, ms precision), measured on one clock (§5.4).
+**Why NDJSON:** it is append-only, so a crash loses at most 1 s of data. It streams easily, anyone can read it in a text editor, and it loads straight into pandas (`pd.read_json(..., lines=True)`). All timestamps are **seconds since session start** (`float`, ms precision), measured on one clock (§5.4).
 
 ### 5.2 `session.json`
 
@@ -714,7 +714,7 @@ $$
 \phi_{\text{pitch}} = \operatorname{atan2}(r_{32}, r_{33})\cdot\tfrac{180}{\pi}
 $$
 
-Verify the axis conventions empirically with a unit test: turn your head right and confirm $\psi > 0$.
+We checked the axis conventions by hand (turn your head right and $\psi > 0$), and a unit test locks that in.
 
 #### 6.2.2 Iris Displacement and Combined Gaze Angle
 For each eye, take the inner and outer corners $c_{in}, c_{out}$, the upper and lower lid midpoints $l_{up}, l_{lo}$, and the iris centre $p$ (landmarks 468 and 473):
@@ -822,7 +822,7 @@ $$
 $\mathcal{B} > 0.2$ means the fillers cluster around specific moments (usually transitions or unfamiliar content), so the advice is to practise those transitions. $\mathcal{B} \approx 0$ means the fillers are spread evenly, so the advice is to build a general pausing habit.
 
 ### 6.4 Monotone Segment Detection (Deep)
-Use a sliding 8 s window over the pYIN semitone track. Flag a window as monotone when $\sigma_{st} < 1.5$ and $\operatorname{std}(\text{RMS}_{dB}) < 2.5$. Merge flagged windows that overlap.
+An 8 s window slides over the pYIN semitone track. A window counts as monotone when $\sigma_{st} < 1.5$ and $\operatorname{std}(\text{RMS}_{dB}) < 2.5$, and windows that overlap get merged.
 
 ### 6.5 Composite Score
 
@@ -838,9 +838,9 @@ $$
 S_{\text{voice}} = 100\cdot\big[0.6\cdot\text{tri}(\sigma_{st};\,1, 3.5, 7) + 0.4\cdot\text{tri}(\operatorname{std}\text{RMS}_{dB};\,1.5, 5, 10)\big]
 $$
 
-$S_{\text{struct}}$ is rule-based: 25 points each for an opening hook (a question or statistic in the first 15%), at least 2 transition markers, a detected conclusion marker, and duration within ±10% of the target. Map the final score to letter grades: A ≥ 90, B ≥ 80, and so on.
+$S_{\text{struct}}$ is rule-based: 25 points each for an opening hook (a question or statistic in the first 15%), at least 2 transition markers, a detected conclusion marker, and duration within ±10% of the target. The final score maps to letter grades: A ≥ 90, B ≥ 80, and so on.
 
-**Document every constant in Appendix A and keep all of them in `engine/config/defaults.toml`.** Judges will ask why a number was chosen, so put a short justification next to each one.
+Every constant is listed in Appendix A with a short reason for the value, and all of them live in `engine/config/defaults.toml` so they're easy to tune.
 
 ---
 
@@ -890,8 +890,8 @@ The current level is shown as a small "Performance mode" badge. The app never cr
 | E2E (Playwright + Electron) | Fake camera (`--use-file-for-fake-video-capture`) + WAV-fed mic → full session → debrief renders |
 | Offline | Network-disabled run passes; `pytest-socket` blocks external hosts |
 
-### 8.2 Accuracy Evaluation (this is your evidence for the judges)
-Build a small **labelled dataset**: about 20 clips of 60 s each from team members and volunteers (with consent), recorded in different rooms. Hand-label fillers in Audacity label tracks and gaze zones from synchronized video. Report:
+### 8.2 Accuracy Evaluation
+The plan is a small **labelled dataset**: about 20 clips of 60 s each from us and from volunteers (with consent), recorded in different rooms. Fillers get hand-labelled in Audacity label tracks, and gaze zones get labelled from synced video. We report:
 
 | Metric | How it is computed | Target |
 |---|---|---|
@@ -901,7 +901,7 @@ Build a small **labelled dataset**: about 20 clips of 60 s each from team member
 | RT latency p50 / p95 | Instrumented timestamps | ≤ 400 / 600 ms |
 | Deep analysis time | 5-min clip | ≤ 60 s |
 
-Include a **confusion matrix** for the gaze zones and an **ablation table**: filler F1 with Vosk only, Whisper only, Whisper + disfluency prompt, and the full union. This shows why the hybrid design was worth it.
+We also want a **confusion matrix** for the gaze zones and an **ablation table** (filler F1 with Vosk only, Whisper only, Whisper + disfluency prompt, and the full union) to check whether the hybrid design actually pays off.
 
 ---
 
@@ -919,127 +919,14 @@ Include a **confusion matrix** for the gaze zones and an **ablation table**: fil
 
 ---
 
-## 10. TSA Competition Strategy
-
-> **Check the current TSA High School Competitive Events Guide** for this year's Software Development theme, documentation requirements, page limits, timing, and rubric. Rules and themes change every year. Treat the guidance below as a framework to map onto the official rubric, not as a substitute for it.
-
-### 10.1 Map Every Rubric Line to Evidence
-Make a table in your docs that maps each rubric criterion to the artefact that proves it (a section of this spec, a test report, a screenshot, a commit range). Judges score faster and more generously when they don't have to look for evidence.
-
-| Typical judging area | Your evidence |
-|---|---|
-| Problem and theme alignment | User research: survey classmates on speaking anxiety; cite the theme explicitly |
-| Design process | This spec, architecture diagrams, UI wireframes, decision log (ADRs) |
-| Technical complexity | Dual-engine architecture, local ML, hybrid filler detection, Mahalanobis gaze zones, asymmetric integrator |
-| Functionality | Live demo + Replay Mode + test report |
-| Code quality | Typed code, linting, CI badge, >80% engine coverage, modular structure |
-| User experience | Usability testing with 5+ users, before/after iteration notes |
-| Documentation | Portfolio + user guide + in-app help |
-| Presentation | Rehearsed 5-minute script (below) |
-
-### 10.2 Repository Structure
-
-```
-podium/
-├── README.md                    # 60-second overview, GIF, install, architecture image
-├── docs/
-│   ├── TECHNICAL_SPEC.md        # this document
-│   ├── adr/                     # Architecture Decision Records (0001-electron-over-tauri.md …)
-│   ├── evaluation/              # accuracy report, confusion matrices, latency plots
-│   ├── user-guide.md
-│   └── portfolio/               # TSA documentation portfolio source
-├── apps/desktop/                # Electron + React
-│   ├── src/main/                # process spawn, offline guard, IPC bridge
-│   ├── src/preload/
-│   ├── src/renderer/
-│   │   ├── features/live/       # HUD
-│   │   ├── features/audience/   # r3f scene, avatar FSM
-│   │   ├── features/gaze/       # worker, calibration, classifier
-│   │   ├── features/debrief/    # heatmap, timeline, Q&A, TTS player
-│   │   └── stores/
-│   └── tests/
-├── engine/                      # Python package `podium_engine`
-│   ├── podium_engine/
-│   │   ├── realtime/            # capture, vad, asr_stream, fillers, pace, prosody, fusion
-│   │   ├── deep/                # transcribe, reconcile, prosody, segmentation, scoring
-│   │   ├── nlp/                 # keyphrases, question_gen, debrief_script
-│   │   ├── tts/
-│   │   ├── ipc/                 # ws server, envelope, clock sync
-│   │   ├── storage/
-│   │   └── config/defaults.toml
-│   └── tests/
-├── shared/schemas/              # JSON Schema source of truth → codegen
-├── models/                      # .gitignored; populated by scripts/fetch_models.py (SHA-256 pinned)
-├── scripts/                     # fetch_models, build_idf, package, benchmark
-├── THIRD_PARTY_NOTICES.md
-└── .github/workflows/ci.yml     # lint, type-check, test, build on win + mac
-```
-
-**Engineering signals judges notice:**
-- Conventional commits and a steady commit history (no single giant commit the night before).
-- Short ADRs explaining *why* (e.g., "Why gaze runs in the renderer").
-- A `make demo` or `npm run demo` command that launches Replay Mode.
-- A benchmark script that prints the latency and accuracy table live.
-
-### 10.3 Documentation Portfolio Outline
-Adjust this to the official required elements. Plan-of-work logs and copyright/permission checklists are commonly required across TSA events, so confirm them in the current guide.
-1. Title page and table of contents
-2. Executive summary (problem → solution → impact, ½ page)
-3. Theme alignment and user research
-4. Requirements (goals table §1.1)
-5. Architecture and design (diagrams §2, ADR summaries)
-6. Algorithms (condensed §6, with plain-English explanations next to the formulas)
-7. Testing and evaluation (§8 results with charts)
-8. User guide (screenshots)
-9. Privacy and ethics (offline design, consent for recordings, data deletion)
-10. Third-party licenses and references
-11. Plan of work / team log
-
-### 10.4 Five-Minute Judge Demo Script
-
-| Time | Segment | What happens on screen | What you say (gist) |
-|---|---|---|---|
-| 0:00–0:30 | **Hook: the bad speech** | A teammate gives 20 s of a deliberately poor speech: "um", monotone, staring at notes. The audience slumps and phones come out. The engagement meter drops to around 30. | "Everyone has given this speech. Nobody tells you in the moment, until now." |
-| 0:30–0:50 | **Offline proof** | Turn on airplane mode / unplug Ethernet **on camera**. Show the "Offline ✓" badge. | "Everything you're about to see runs on this laptop. No cloud, no API, and your voice never leaves the device." |
-| 0:50–2:00 | **The good speech** | Same teammate, same topic, delivered well. Look left and the **left section perks up**. Show the live WPM band and the zone mini-map. | Point out the per-section reactivity and the asymmetric recovery ("it's harder to win an audience back"). |
-| 2:00–3:00 | **Debrief** | Analysis finishes in about 30 s; talk over the progress bar. Heatmap, pace regimes, filler cluster on the timeline. Click a cluster and the video seeks to it. **Piper speaks the debrief.** | "It found the filler burst exactly where she transitioned into methodology." |
-| 3:00–3:40 | **Q&A generator** | Show questions generated from *this* speech. Have Piper ask one aloud. | "No LLM: keyphrase extraction plus rule templates, so every question is explainable." |
-| 3:40–4:30 | **Under the hood** | One architecture slide, then the evaluation table (F1, gaze accuracy, latency) and the ablation chart. | Dual engines, hybrid filler detection, why each design choice was made. |
-| 4:30–5:00 | **Impact and close** | History view showing improvement over 5 practice sessions. | Who it helps (students, ESL speakers, interviewees); roadmap; thank you. |
-
-**Demo-day protections:**
-- **Replay Mode:** it plays a recorded `audio.wav` + `gaze.ndjson` through the *same* pipeline at real-time speed. If the mic or camera fails, switch with one hotkey (`Ctrl+Shift+R`) and keep presenting. Always have it ready.
-- Benchmark on the **exact demo laptop** beforehand. Bring a USB mic and an external webcam as backups.
-- Pre-grant OS camera and microphone permissions. Close every other app. Plug in power, because battery mode throttles the CPU.
-- Use 3 short, rehearsed speeches whose metrics you know, so you can predict what the judges will see.
-- Hand the laptop to a judge for 20 seconds if time allows. Interactivity is memorable.
-- Prepare answers for likely judge questions: *"How do you know it's accurate?"* (§8.2), *"What if two people are on camera?"* (largest face; diarization is out of scope), *"Why not use ChatGPT?"* (privacy, offline, explainability, competition constraint), *"How did you choose the weights?"* (Appendix A justifications plus tuning on your labelled set).
-
-### 10.5 Suggested Build Plan (12 weeks)
-
-| Week | Milestone |
-|---|---|
-| 1 | Repo, CI, schemas, Electron ↔ Python WS handshake, offline guard |
-| 2–3 | Audio capture, VAD, Vosk, WPM, lexical fillers, live HUD |
-| 3–4 | Gaze worker, calibration, zone classifier, mini-map |
-| 5 | Boredom fusion + telemetry storage |
-| 6–7 | 3D audience + avatar FSM + per-section reactivity |
-| 7–8 | Deep engine: Whisper, reconciliation, prosody, segmentation, scoring |
-| 9 | Debrief UI, heatmap, timeline, Piper TTS, Q&A generator |
-| 10 | Labelled dataset, accuracy evaluation, constant tuning, FPD training |
-| 11 | Usability testing, polish, Replay Mode, packaging on Win + macOS |
-| 12 | Documentation portfolio, demo rehearsal (10+ timed runs) |
-
----
-
 ## Appendix A: Default Constants
 
 | Constant | Value | Rationale |
 |---|---|---|
-| WPM window $W$ | 5 s | Required by spec; long enough for ~12 words; EMA smooths the display |
+| WPM window $W$ | 5 s | Long enough for ~12 words; EMA smooths the display |
 | Optimal WPM band | 130–170 | Common guidance for presentation speaking rates; adjust per user |
 | Filler sigmoid $\rho_0, s_f$ | 0.05, 0.015 | A 5% filler ratio is noticeable to listeners; ≥8% is distracting |
-| Pitch variability band | 1.5–4.0 st | Below about 1.5 st sounds flat; tune on your labelled data |
+| Pitch variability band | 1.5–4.0 st | Below about 1.5 st sounds flat; to be tuned on our labelled data |
 | Gaze audience entropy λ | 0.6 | 60% of gaze credit for looking at the audience at all; 40% for spreading attention around the room |
 | Boredom weights | 0.25 / 0.30 / 0.35 / 0.10 | Gaze and vocal variety dominate perceived engagement; tune by ablation on volunteer ratings |
 | $k_\uparrow, k_\downarrow$ | 1/6, 1/10 s⁻¹ | Time constants of 6 s to lose the audience and 10 s to win it back; feels natural in testing |
@@ -1049,4 +936,4 @@ Adjust this to the official required elements. Plan-of-work logs and copyright/p
 | HMM self-transition | 0.97 @ 30 Hz | Expected dwell of about 1.1 s; suppresses glances under 150 ms |
 | DBSCAN eps / min_samples | 4 s / 3 | "Three fillers within a few seconds" reads as a cluster to listeners |
 
-> **Tuning protocol:** have 5+ volunteers rate engagement (1–7) on 30 s clips. Fit the Boredom weights by minimizing the squared error between $E$ and the mean ratings (`scipy.optimize.minimize` with simplex constraints). Report the before/after correlation in your portfolio.
+> **Tuning protocol:** 5+ volunteers rate engagement (1–7) on 30 s clips. Then we fit the Boredom weights by minimizing the squared error between $E$ and the mean ratings (`scipy.optimize.minimize` with simplex constraints), and compare the correlation before and after.

@@ -1,7 +1,7 @@
 # Evaluation
 
-Judges will ask "how do you know it works?" This folder holds the evidence, and the scripts make it
-reproducible.
+How do we know Podium actually works? This folder has our measurements, and the scripts let anyone
+re-run them.
 
 ## 1. Performance (measured)
 
@@ -16,16 +16,16 @@ reproducible.
 | Deep analysis + spoken debrief + 6 spoken questions | ≈ 7–11 s |
 | MediaPipe Face Landmarker cold load (browser, GPU delegate) | 5.5 s |
 
-Re-run it on the **demo laptop** before competition:
+To run it on your own machine:
 
 ```bash
 cd engine && uv run python ../scripts/benchmark.py
 ```
 
-**Against the spec targets:** deep analysis is far inside the 60 s budget. Live filler alerts take
-≈ 1.6 s, not the 0.6 s the spec aimed for. Vosk's partial hypotheses only commit a word about 1.5 s
-after it is spoken. Options: an acoustic filled-pause detector trained on real recordings (it fires the
-moment the vowel ends), or a smaller decoding beam.
+**Compared to our targets:** deep analysis is well under the 60 s budget. Live filler alerts take
+≈ 1.6 s, though, not the 0.6 s we planned for. That's because Vosk's partial hypotheses only commit a
+word about 1.5 s after it's spoken. Two things we could try: an acoustic filled-pause detector trained
+on real recordings (it would fire the moment the vowel ends), or a smaller decoding beam.
 
 ## 2. Filler accuracy (fixture, measured)
 
@@ -37,20 +37,24 @@ The fixture contains 6 fillers: *um, uh, like, you know, um, uh*.
 | Live engine (lexical + sound-alike rules) | 4 | misses "you know" (followed by "that", so treated as grammatical) and one "uh" heard as *all* with full confidence |
 | Whisper + disfluency prompt + reconciliation | 5 | one "uh" lost next to "So," |
 
-The fixture is synthetic (Piper TTS). **Real speech will behave differently. Build a labelled set.**
+The fixture is synthetic (Piper TTS), so real speech will behave differently. That's why the next step
+is a labelled set of real recordings.
 
-## 3. Build a labelled set (to do, for the portfolio)
+## 3. Labelled set of real recordings (in progress)
 
-1. Record 15–20 clips of 60 s each from volunteers (get consent), in different rooms and with different mics.
-2. In Audacity, add a label track and mark every filler (`Ctrl+B`), then export labels as `clipNN.txt` next to `clipNN.wav`.
+How we're building it:
+
+1. Record 15–20 clips of 60 s each from volunteers (with their consent), in different rooms and on different mics.
+2. In Audacity, add a label track and mark every filler (`Ctrl+B`), then export the labels as `clipNN.txt` next to `clipNN.wav`.
 3. Run:
 
 ```bash
 cd engine && uv run python ../scripts/evaluate_fillers.py path/to/clips
 ```
 
-4. Paste the precision / recall / F1 table here. Then tune `engine/podium_engine/config/defaults.toml`
-   (sound-alike duration, FPD thresholds) and re-run. Show the before/after in the portfolio.
+4. Add the precision / recall / F1 table here, tune `engine/podium_engine/config/defaults.toml`
+   (sound-alike duration, FPD thresholds), and re-run to compare before and after.
 
-For gaze, record a session while a teammate notes which zone you look at every 5 s. Compare against
-`telemetry/gaze.ndjson` to build a confusion matrix, both calibrated and uncalibrated.
+For gaze, one of us records a session while a teammate writes down which zone the speaker is looking at
+every 5 s. Comparing that against `telemetry/gaze.ndjson` gives a confusion matrix, both calibrated
+and uncalibrated.

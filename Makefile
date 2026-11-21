@@ -19,7 +19,7 @@ test: ## all automated tests
 	cd engine && uv run ruff check podium_engine tests ../scripts && uv run pytest -q
 	cd apps/desktop && npx tsc --noEmit && npx vitest run
 
-bench: ## performance table for the portfolio
+bench: ## performance table (real-time factor, latency, analysis time)
 	cd engine && uv run python ../scripts/benchmark.py
 
 build: ## production renderer + Electron bundles
