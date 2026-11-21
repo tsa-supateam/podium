@@ -15,6 +15,7 @@ import { reducedMotion } from "../../ui/motion";
 
 export const audienceStats = { counts: { engaged: 0, neutral: 0, bored: 0, confused: 0 } };
 
+import { OUTER as LOGO_OUTER, COUNTER as LOGO_COUNTER } from "../../ui/logo";
 // ---------------------------------------------------------------- palettes (3D materials, not UI tokens)
 const SKIN = ["#F3D3BC", "#E8B894", "#D3A27A", "#B57D55", "#8E5A3A", "#6A4029", "#45291A"];
 const HAIR = ["#141110", "#2B1D14", "#4A3020", "#6E4B2E", "#A07A4F", "#C9B38A", "#8A8A8A", "#D9D4CC"];
@@ -600,20 +601,20 @@ function drawAtlas(cv: HTMLCanvasElement) {
   ["A", "B", "C"].forEach((l, i) => ctx.fillText(l, i * 64 + 32, 128));
   ctx.font = "700 44px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
   ctx.fillText("EXIT", 352, 128);
-  // logo for the LED wall and the lectern engraving: the half-filled circle mark (◐) used in the top bar
+  // logo for the LED wall and the lectern engraving: the octagon "P" mark from the boot splash
   const logo = (x: number, y: number, s: number) => {
-    const r = s / 2, cx = x + r, cy = y + r, lw = Math.max(4, s * 0.09);
-    ctx.save();
+    const k = s / 64;
+    const poly = (pts: string) => {
+      pts.split(" ").forEach((pt, i) => {
+        const [px, py] = pt.split(",").map(Number);
+        if (i) ctx.lineTo(x + px * k, y + py * k); else ctx.moveTo(x + px * k, y + py * k);
+      });
+      ctx.closePath();
+    };
     ctx.beginPath();
-    ctx.arc(cx, cy, r - lw / 2, Math.PI / 2, (3 * Math.PI) / 2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(cx, cy, r - lw / 2, 0, Math.PI * 2);
-    ctx.lineWidth = lw;
-    ctx.strokeStyle = ctx.fillStyle;
-    ctx.stroke();
-    ctx.restore();
+    poly(LOGO_OUTER);
+    poly(LOGO_COUNTER);
+    ctx.fill("evenodd");
   };
   ctx.fillStyle = SIGNAL;
   logo(70, 279, 210);

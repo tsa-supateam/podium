@@ -23,11 +23,11 @@ export default function Home() {
       <section className="home-top">
         <div className="home-copy">
           <h1 className="display">
-            {["Practice in front", "of an audience", "that reacts."].map((l, i) => (
+            {["Your digital", "public speaking", "coach."].map((l, i) => (
               <span className="line-mask" key={l}><span className="line" style={{ animationDelay: `${80 + i * 60}ms` }}>{l}</span></span>
             ))}
           </h1>
-          <p>Speak. The room reacts. Get scored on pace, fillers, voice and eye contact.</p>
+          <p>Speak to a simulated audience. Get scored on pace, fillers, voice and eye contact.</p>
           <div className="home-ctas">
             <button className="btn primary big" onClick={() => go("setup")}>
               Start a practice run <Icon name="arrowR" size={14} className="arw" />

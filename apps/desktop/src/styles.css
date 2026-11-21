@@ -172,7 +172,6 @@ input[type="checkbox"]:checked::after { content: ""; width: 6px; height: 3px; bo
 .win-controls button:active svg { transform: scale(0.88); }
 .win-controls svg { transition: transform 120ms var(--ease-out-expo); }
 .brand { background: none; border: 0; display: flex; align-items: center; padding: 0 20px; border-right: 1px solid var(--hair); gap: 8px; color: var(--paper); font: 700 17px var(--sans); }
-.brand-mark { color: var(--accent); font-size: 20px; line-height: 1; }
 .logo-lockup { display: inline-flex; align-items: center; gap: 10px; }
 .logo-words { display: flex; flex-direction: column; line-height: 1; gap: 3px; text-align: left; }
 .logo-word { font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: 0.22em; color: var(--paper); }
@@ -321,11 +320,11 @@ input[type="checkbox"]:checked::after { content: ""; width: 6px; height: 3px; bo
 .segmented button:hover:not(.on) { color: var(--paper); }
 
 /* ----------------------------------------------------------------- boot + shutter */
-.boot { position: fixed; inset: 0; z-index: 100; background: var(--charcoal-900); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; cursor: pointer; animation: boot-out 200ms ease 1150ms both; }
-.boot-frame { fill: none; stroke: var(--concrete-dim); stroke-width: 1; stroke-dasharray: 1; stroke-dashoffset: 1; animation: dash 380ms var(--ease-out-expo) forwards; }
-.boot-corner { fill: var(--signal); transform-box: fill-box; transform-origin: center; transform: scale(0); animation: lock 240ms var(--ease-spring) forwards; }
-.boot-fill { fill: var(--signal); clip-path: inset(100% 0 0 0); animation: wipe-up 320ms var(--ease-in-out-quint) 560ms forwards; }
-.boot-cut { fill: var(--charcoal-900); transform-box: fill-box; transform-origin: center; transform: scale(0); animation: lock 200ms var(--ease-spring) 820ms forwards; }
+.boot { position: fixed; inset: 0; z-index: 100; background: var(--charcoal-900); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; cursor: pointer; animation: boot-out 300ms ease 2900ms both; }
+.boot-frame { fill: none; stroke: var(--concrete-dim); stroke-width: 1; stroke-dasharray: 1; stroke-dashoffset: 1; animation: dash 600ms var(--ease-out-expo) forwards; }
+.boot-corner { fill: var(--signal); transform-box: fill-box; transform-origin: center; transform: scale(0); animation: lock 340ms var(--ease-spring) forwards; }
+.boot-fill { fill: var(--signal); clip-path: inset(100% 0 0 0); animation: wipe-up 500ms var(--ease-in-out-quint) 900ms forwards; }
+.boot-cut { fill: var(--charcoal-900); transform-box: fill-box; transform-origin: center; transform: scale(0); animation: lock 300ms var(--ease-spring) 1350ms forwards; }
 .boot-word { font-family: var(--display); font-weight: 700; font-size: 30px; letter-spacing: 0.3em; min-height: 36px; display: flex; align-items: center; }
 .boot-cursor { width: 0.55em; height: 0.9em; background: var(--signal); margin-left: 4px; animation: blink 0.5s steps(1) infinite; }
 .boot-meta { position: absolute; bottom: 28px; }

@@ -14,7 +14,7 @@ import Average from "./features/history/Average";
 import Learn from "./features/learn/Learn";
 import { stopSession } from "./features/live/session";
 import type { Screen } from "./stores/app";
-import { BootSplash } from "./ui/logo";
+import { BootSplash, LogoMark } from "./ui/logo";
 import { Icon } from "./ui/icons";
 import { ZonePatterns } from "./ui/kit";
 import { installCardLight } from "./ui/motion";
@@ -238,7 +238,7 @@ function TopBar() {
   return (
     <header className="topbar">
       <button className="brand" onClick={() => !inSession && go("home")} disabled={inSession} aria-label="Podium home">
-        <span className="brand-mark" aria-hidden>◐</span> Podium
+        <LogoMark size={22} /> Podium
       </button>
       <nav className="nav" ref={navRef}>
         {NAV.map(([s, label]) => (

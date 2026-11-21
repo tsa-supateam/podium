@@ -30,7 +30,7 @@ export function LogoLockup({ size = 28 }: { size?: number }) {
   );
 }
 
-/** Cold-start sequence (1.2s): frame draws, corners lock, fill wipes up, counter cuts, wordmark types. */
+/** Cold-start sequence (~3.2s): frame draws, corners lock, fill wipes up, counter cuts, wordmark types. */
 export function BootSplash() {
   const [show, setShow] = useState(() => {
     try {
@@ -49,8 +49,8 @@ export function BootSplash() {
     let raf = 0;
     const tick = (now: number) => {
       const e = now - t0;
-      setTyped(Math.max(0, Math.min(word.length, Math.floor((e - 760) / 50))));
-      if (e > 1350) return setShow(false);
+      setTyped(Math.max(0, Math.min(word.length, Math.floor((e - 1500) / 80))));
+      if (e > 3200) return setShow(false);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -67,7 +67,7 @@ export function BootSplash() {
       <svg className="boot-mark" width="132" height="132" viewBox="-4 -4 72 72" aria-hidden>
         <path className="boot-frame" d={pathOf(FRAME)} pathLength={1} />
         {FRAME_PTS.map(([x, y], i) => (
-          <rect key={i} className="boot-corner" x={x - 2} y={y - 2} width={4} height={4} style={{ animationDelay: `${260 + i * 35}ms` }} />
+          <rect key={i} className="boot-corner" x={x - 2} y={y - 2} width={4} height={4} style={{ animationDelay: `${420 + i * 55}ms` }} />
         ))}
         <path className="boot-fill" d={pathOf(OUTER)} />
         <path className="boot-cut" d={pathOf(COUNTER)} />
