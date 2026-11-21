@@ -13,9 +13,15 @@ blocks outbound network requests in code, and a test checks it.
 
 ![Live session with the reactive audience](docs/img/live.jpg)
 
-| Debrief | Timeline |
+| Home | Debrief |
 |---|---|
-| ![Debrief](docs/img/debrief.jpg) | ![Timeline](docs/img/timeline.jpg) |
+| ![Home](docs/img/home.jpg) | ![Debrief](docs/img/debrief.jpg) |
+
+| Timeline | Learn |
+|---|---|
+| ![Timeline](docs/img/timeline.jpg) | ![Learn skill tree](docs/img/learn.jpg) |
+
+![Play: quick games, Pace Runner, boss fights and the Locker](docs/img/play.jpg)
 
 Built for the TSA Software Development event. The full design is in
 [`docs/TECHNICAL_SPEC.md`](docs/TECHNICAL_SPEC.md), and the Learn games are described in
